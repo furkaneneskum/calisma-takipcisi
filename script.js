@@ -3,6 +3,24 @@
 
   const STORAGE_KEY = 'studyTrackerData';
 
+  const storage = {
+    get(key) {
+      try {
+        return localStorage.getItem(key);
+      } catch {
+        return null;
+      }
+    },
+    set(key, value) {
+      try {
+        localStorage.setItem(key, value);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+  };
+
   const PERIODS = [
     { id: 'night', label: 'Gece (00-06)', start: 0, end: 6, color: '#6366f1' },
     { id: 'morning', label: 'Sabah (06-12)', start: 6, end: 12, color: '#00d4ff' },
@@ -114,7 +132,7 @@
 
   function loadState() {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = storage.get(STORAGE_KEY);
       if (!raw) return;
 
       const parsed = JSON.parse(raw);
@@ -163,7 +181,7 @@
       active.runningSince = Date.now();
     }
 
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+    storage.set(STORAGE_KEY, JSON.stringify({
       date: state.date,
       sessions: state.sessions,
       active
@@ -399,6 +417,11 @@
     const values = PERIODS.map(p => Math.round(totals[p.id] * 10) / 10);
     const hasData = values.some(v => v > 0);
 
+    if (typeof Chart === 'undefined') {
+      renderChartLegend(totals);
+      return;
+    }
+
     if (chart) {
       chart.data.datasets[0].data = hasData ? values : [1, 1, 1, 1];
       chart.data.datasets[0].backgroundColor = hasData
@@ -596,6 +619,10 @@
   'use strict';
 
   const AMBIENT_STORAGE_KEY = 'studyTrackerAmbient';
+  const USE_WEB_AUDIO = !(
+    /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  );
 
   const TRACKS = {
     rain: {
@@ -624,8 +651,6 @@
   const playBtn = document.getElementById('ambientPlayPause');
   const volumeSlider = document.getElementById('ambientVolume');
   const trackButtons = document.querySelectorAll('.ambient-track');
-  const iconPlay = playBtn.querySelector('.ambient-icon-play');
-  const iconPause = playBtn.querySelector('.ambient-icon-pause');
 
   let currentTrack = null;
   let isPlaying = false;
@@ -633,14 +658,19 @@
   let gainNode = null;
 
   function initAudioGraph() {
-    if (gainNode) return;
+    if (gainNode || !USE_WEB_AUDIO) return;
 
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const source = audioCtx.createMediaElementSource(audio);
-    gainNode = audioCtx.createGain();
-    source.connect(gainNode);
-    gainNode.connect(audioCtx.destination);
-    applyVolume();
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const source = audioCtx.createMediaElementSource(audio);
+      gainNode = audioCtx.createGain();
+      source.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      applyVolume();
+    } catch {
+      gainNode = null;
+      audioCtx = null;
+    }
   }
 
   function resumeAudioContext() {
@@ -651,7 +681,7 @@
 
   function loadPrefs() {
     try {
-      const raw = localStorage.getItem(AMBIENT_STORAGE_KEY);
+      const raw = storage.get(AMBIENT_STORAGE_KEY);
       if (!raw) return;
       const prefs = JSON.parse(raw);
       if (typeof prefs.volume === 'number') {
@@ -660,7 +690,6 @@
       if (prefs.track && TRACKS[prefs.track]) {
         currentTrack = prefs.track;
         setActiveTrack(currentTrack);
-        audio.src = TRACKS[currentTrack].src;
       }
     } catch {
       /* ignore */
@@ -669,7 +698,7 @@
   }
 
   function savePrefs() {
-    localStorage.setItem(AMBIENT_STORAGE_KEY, JSON.stringify({
+    storage.set(AMBIENT_STORAGE_KEY, JSON.stringify({
       track: currentTrack,
       volume: Number(volumeSlider.value) / 100
     }));
@@ -697,8 +726,16 @@
     isPlaying = playing;
     playBtn.classList.toggle('is-playing', playing);
     playBtn.setAttribute('aria-label', playing ? 'Durdur' : 'Oynat');
-    iconPlay.hidden = playing;
-    iconPause.hidden = !playing;
+  }
+
+  function ensureTrackSource() {
+    if (!currentTrack) return false;
+    const targetSrc = new URL(TRACKS[currentTrack].src, window.location.href).href;
+    if (audio.src !== targetSrc) {
+      audio.src = TRACKS[currentTrack].src;
+      audio.load();
+    }
+    return true;
   }
 
   function stopAudio() {
@@ -708,10 +745,12 @@
   }
 
   function playCurrentTrack() {
-    if (!currentTrack) return;
+    if (!ensureTrackSource()) return;
 
-    initAudioGraph();
-    resumeAudioContext();
+    if (USE_WEB_AUDIO) {
+      initAudioGraph();
+      resumeAudioContext();
+    }
     applyVolume();
 
     const playPromise = audio.play();
@@ -747,6 +786,9 @@
 
     if (autoPlay) playCurrentTrack();
   }
+
+  audio.setAttribute('playsinline', '');
+  audio.setAttribute('webkit-playsinline', '');
 
   playBtn.addEventListener('click', () => {
     if (!currentTrack) {

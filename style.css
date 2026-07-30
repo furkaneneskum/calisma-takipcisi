@@ -29,6 +29,7 @@
 html,
 body {
   height: 100%;
+  min-height: 100dvh;
 }
 
 body {
@@ -37,6 +38,8 @@ body {
   color: var(--text-primary);
   line-height: 1.5;
   overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body::before {
@@ -53,10 +56,14 @@ body::before {
 .app {
   position: relative;
   z-index: 1;
-  min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
   padding: 1.5rem 2rem;
+  padding-top: max(1.5rem, env(safe-area-inset-top));
+  padding-right: max(2rem, env(safe-area-inset-right));
+  padding-bottom: max(5.5rem, calc(4.5rem + env(safe-area-inset-bottom)));
+  padding-left: max(2rem, env(safe-area-inset-left));
   max-width: 1400px;
   margin: 0 auto;
 }
@@ -359,7 +366,7 @@ body::before {
 
 .tag-input {
   font-family: var(--font-mono);
-  font-size: 0.72rem;
+  font-size: 1rem;
   letter-spacing: 0.04em;
   color: var(--text-primary);
   background: transparent;
@@ -389,11 +396,13 @@ body::before {
   font-weight: 500;
   letter-spacing: 0.15em;
   padding: 0.85rem 1.75rem;
+  min-height: 44px;
   background: transparent;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text-primary);
   cursor: pointer;
+  touch-action: manipulation;
   transition:
     border-color var(--transition),
     color var(--transition),
@@ -580,8 +589,8 @@ body::before {
 /* Ambient Player */
 .ambient-player {
   position: fixed;
-  right: 1.5rem;
-  bottom: 1.5rem;
+  right: max(1.5rem, env(safe-area-inset-right));
+  bottom: max(1.5rem, env(safe-area-inset-bottom));
   z-index: 90;
   display: flex;
   align-items: center;
@@ -599,12 +608,25 @@ body::before {
   box-shadow: 0 0 24px rgba(34, 197, 94, 0.08);
 }
 
+.ambient-icon-pause {
+  display: none;
+}
+
+.ambient-play.is-playing .ambient-icon-play {
+  display: none;
+}
+
+.ambient-play.is-playing .ambient-icon-pause {
+  display: block;
+}
+
 .ambient-play {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 1.85rem;
-  height: 1.85rem;
+  width: 2.25rem;
+  height: 2.25rem;
+  touch-action: manipulation;
   padding: 0;
   background: transparent;
   border: 1px solid rgba(34, 197, 94, 0.35);
@@ -649,8 +671,9 @@ body::before {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 1.65rem;
-  height: 1.65rem;
+  width: 2.25rem;
+  height: 2.25rem;
+  touch-action: manipulation;
   padding: 0;
   background: transparent;
   border: 1px solid transparent;
@@ -748,6 +771,10 @@ body::before {
 @media (max-width: 480px) {
   .app {
     padding: 1rem;
+    padding-top: max(1rem, env(safe-area-inset-top));
+    padding-right: max(1rem, env(safe-area-inset-right));
+    padding-bottom: max(6.5rem, calc(5rem + env(safe-area-inset-bottom)));
+    padding-left: max(1rem, env(safe-area-inset-left));
   }
 
   .header {
