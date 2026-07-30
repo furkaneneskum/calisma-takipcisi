@@ -1,0 +1,11 @@
+# Büyük arşiv — repoya eklenmesin
+audio/openlofi.zip
+
+# Sistem dosyaları
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editör
+.vscode/
+.idea/

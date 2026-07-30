@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Çalışma Takipçisi</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <h1 class="logo">Study Tracker</h1>
+      <p class="daily-total" id="dailyTotal">Bugün Toplam: 0 Saat 0 Dakika</p>
+    </header>
+
+    <main class="main-grid">
+      <aside class="panel panel-left">
+        <div class="panel-header">
+          <h2 class="panel-title">Bugünün Kayıtları</h2>
+          <span class="session-count" id="sessionCount" hidden></span>
+        </div>
+        <ul class="session-list" id="sessionList">
+          <li class="session-empty">Henüz kayıt yok</li>
+        </ul>
+      </aside>
+
+      <section class="panel panel-center">
+        <div class="timer-wrapper">
+          <div class="timer-glow"></div>
+          <time class="timer" id="timer">00:00:00</time>
+        </div>
+        <div class="controls">
+          <div class="controls-buttons">
+            <button class="btn btn-start" id="btnStart" type="button">BAŞLAT</button>
+            <button class="btn btn-stop" id="btnStop" type="button" disabled>DURDUR</button>
+            <button class="btn btn-save" id="btnSave" type="button" disabled>KAYDET</button>
+          </div>
+          <input
+            class="tag-input"
+            id="tagInput"
+            type="text"
+            placeholder="Ne çalışıyorsun?"
+            maxlength="32"
+            autocomplete="off"
+            spellcheck="false"
+          >
+        </div>
+      </section>
+
+      <aside class="panel panel-right">
+        <h2 class="panel-title">Gün Dağılımı</h2>
+        <div class="chart-container">
+          <canvas id="periodChart" aria-label="Günlük çalışma dağılım grafiği"></canvas>
+        </div>
+        <ul class="chart-legend" id="chartLegend"></ul>
+      </aside>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" hidden>
+    <span class="toast-msg" id="toastMsg">Kayıt silindi</span>
+    <button class="toast-undo" id="toastUndo" type="button">Geri Al</button>
+  </div>
+
+  <div class="ambient-player" id="ambientPlayer">
+    <button class="ambient-play" id="ambientPlayPause" type="button" aria-label="Oynat" title="Oynat / Durdur">
+      <svg class="ambient-icon ambient-icon-play" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M8 5v14l11-7z" fill="currentColor"/>
+      </svg>
+      <svg class="ambient-icon ambient-icon-pause" viewBox="0 0 24 24" aria-hidden="true" hidden>
+        <path d="M6 5h4v14H6V5zm8 0h4v14h-4V5z" fill="currentColor"/>
+      </svg>
+    </button>
+    <div class="ambient-tracks" role="group" aria-label="Odak sesleri">
+      <button class="ambient-track" type="button" data-track="rain" title="Hafif Yağmur" aria-label="Hafif Yağmur">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4v4H6V4h2zm8 0v4h-2V4h2zm-5 8v4h-2v-4h2zm-5 0v4H4v-4h2zm10 0v4h-2v-4h2zM7 18v2H5v-2h2zm10 0v2h-2v-2h2z" fill="currentColor"/></svg>
+      </button>
+      <button class="ambient-track" type="button" data-track="heavy-rain" title="Sağanak Yağmur" aria-label="Sağanak Yağmur">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4v3H4V4h2zm14 0v3h-2V4h2zM9 8v3H7V8h2zm8 0v3h-2V8h2zM4 12v3H2v-3h2zm16 0v3h-2v-3h2zM7 16v3H5v-3h2zm5 0v3h-2v-3h2zm5 0v3h-2v-3h2z" fill="currentColor"/></svg>
+      </button>
+      <button class="ambient-track" type="button" data-track="fireplace" title="Şömine" aria-label="Şömine">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c-1 3-4 5-4 8a4 4 0 008 0c0-2-2-4-3-6 1 2 2 3 2 5a2 2 0 01-4 0c0-1 1-2 1-4 0 1-1 0-2-1-3z" fill="currentColor"/></svg>
+      </button>
+      <button class="ambient-track" type="button" data-track="lofi" title="Lofi" aria-label="Lofi Odak Müziği">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16v2h2v-2H4zm4 0v2h2v-2H8zm4 0v2h2v-2h-2zm4 0v2h2v-2h-2zm4 0v2h2v-2h-2zM6 10v2h2v-2H6zm4 0v2h2v-2h-2zm4 0v2h2v-2h-2zm4 0v2h2v-2h-2z" fill="currentColor"/></svg>
+      </button>
+    </div>
+    <input
+      class="ambient-volume"
+      id="ambientVolume"
+      type="range"
+      min="0"
+      max="100"
+      value="55"
+      aria-label="Ses seviyesi"
+      title="Ses seviyesi"
+    >
+  </div>
+
+  <audio id="ambientAudio" loop preload="auto"></audio>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
