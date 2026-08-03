@@ -52,6 +52,24 @@
             spellcheck="false"
           >
         </div>
+        <div class="break-controls">
+          <span class="break-label">Mola</span>
+          <div class="break-duration-wrap">
+            <input
+              class="break-duration"
+              id="breakDuration"
+              type="number"
+              min="1"
+              max="120"
+              value="5"
+              inputmode="numeric"
+              aria-label="Mola süresi (dakika)"
+            >
+            <span class="break-unit">dk</span>
+          </div>
+          <button class="btn btn-break" id="btnBreakStart" type="button">MOLA BAŞLAT</button>
+          <button class="btn btn-break-cancel" id="btnBreakCancel" type="button" disabled>İPTAL</button>
+        </div>
       </section>
 
       <aside class="panel panel-right">

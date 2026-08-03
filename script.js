@@ -30,12 +30,16 @@
 
   const els = {
     timer: document.getElementById('timer'),
+    timerWrapper: document.querySelector('.timer-wrapper'),
     dailyTotal: document.getElementById('dailyTotal'),
     sessionList: document.getElementById('sessionList'),
     btnStart: document.getElementById('btnStart'),
     btnStop: document.getElementById('btnStop'),
     btnSave: document.getElementById('btnSave'),
     tagInput: document.getElementById('tagInput'),
+    breakDuration: document.getElementById('breakDuration'),
+    btnBreakStart: document.getElementById('btnBreakStart'),
+    btnBreakCancel: document.getElementById('btnBreakCancel'),
     sessionCount: document.getElementById('sessionCount'),
     toast: document.getElementById('toast'),
     toastMsg: document.getElementById('toastMsg'),
@@ -56,8 +60,21 @@
       startTime: null,
       elapsedMs: 0,
       runningSince: null
-    }
+    },
+    breakActive: null
   };
+
+  function isBreakSession(session) {
+    return session.type === 'break';
+  }
+
+  function isStudySession(session) {
+    return !isBreakSession(session);
+  }
+
+  function isBreakRunning() {
+    return state.breakActive !== null;
+  }
 
   function createSessionId() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -106,6 +123,13 @@
   }
 
   function formatSessionMeta(session) {
+    if (isBreakSession(session)) {
+      return {
+        tag: 'Mola',
+        duration: formatMinutesShort(session.durationMinutes)
+      };
+    }
+
     const duration = session.label
       ? formatMinutesShort(session.durationMinutes)
       : `Süre: ${formatMinutesLabel(session.durationMinutes)}`;
@@ -120,6 +144,11 @@
     const hours = Math.floor(totalMinutes / 60);
     const mins = Math.round(totalMinutes % 60);
     return `Bugün Toplam: ${hours} Saat ${mins} Dakika`;
+  }
+
+  function getBreakRemainingMs() {
+    if (!state.breakActive) return 0;
+    return Math.max(0, state.breakActive.endsAt - Date.now());
   }
 
   function getCurrentElapsedMs() {
@@ -144,11 +173,16 @@
       state = {
         date: parsed.date,
         sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
-        active: parsed.active || createFreshState().active
+        active: parsed.active || createFreshState().active,
+        breakActive: parsed.breakActive || null
       };
 
       if (state.active.runningSince) {
         state.active.runningSince = Date.now();
+      }
+
+      if (state.breakActive && Date.now() >= state.breakActive.endsAt) {
+        finishBreak(true);
       }
 
       ensureSessionIds();
@@ -165,7 +199,8 @@
         startTime: null,
         elapsedMs: 0,
         runningSince: null
-      }
+      },
+      breakActive: null
     };
   }
 
@@ -184,7 +219,8 @@
     storage.set(STORAGE_KEY, JSON.stringify({
       date: state.date,
       sessions: state.sessions,
-      active
+      active,
+      breakActive: state.breakActive
     }));
 
     state.active.elapsedMs = active.elapsedMs;
@@ -249,6 +285,7 @@
     const totals = { night: 0, morning: 0, afternoon: 0, evening: 0 };
 
     state.sessions.forEach(session => {
+      if (!isStudySession(session)) return;
       const dist = getSessionDistribution(session);
       Object.keys(dist).forEach(key => {
         totals[key] += dist[key];
@@ -259,10 +296,22 @@
   }
 
   function getTotalMinutes() {
-    return state.sessions.reduce((sum, s) => sum + s.durationMinutes, 0);
+    return state.sessions
+      .filter(isStudySession)
+      .reduce((sum, s) => sum + s.durationMinutes, 0);
   }
 
   function renderTimer() {
+    if (isBreakRunning()) {
+      els.timer.textContent = formatDuration(getBreakRemainingMs());
+      els.timer.classList.remove('running');
+      els.timer.classList.add('break-mode');
+      els.timerWrapper.classList.add('break-active');
+      return;
+    }
+
+    els.timerWrapper.classList.remove('break-active');
+    els.timer.classList.remove('break-mode');
     const ms = getCurrentElapsedMs();
     els.timer.textContent = formatDuration(ms);
     els.timer.classList.toggle('running', !!state.active.runningSince);
@@ -352,7 +401,7 @@
     sorted.forEach(session => {
       const meta = formatSessionMeta(session);
       const li = document.createElement('li');
-      li.className = 'session-item';
+      li.className = 'session-item' + (isBreakSession(session) ? ' session-break' : '');
 
       const body = document.createElement('div');
       body.className = 'session-body';
@@ -482,20 +531,39 @@
   }
 
   function updateButtons() {
+    const breakRunning = isBreakRunning();
     const isRunning = !!state.active.runningSince;
     const hasSession = state.active.startTime !== null && getCurrentElapsedMs() > 0;
 
-    els.btnStart.disabled = isRunning;
-    els.btnStop.disabled = !isRunning;
-    els.btnSave.disabled = !hasSession;
+    els.btnStart.disabled = isRunning || breakRunning;
+    els.btnStop.disabled = !isRunning || breakRunning;
+    els.btnSave.disabled = !hasSession || breakRunning;
+    els.tagInput.disabled = breakRunning;
+
+    els.btnBreakStart.disabled = breakRunning || isRunning;
+    els.btnBreakCancel.disabled = !breakRunning;
+    els.breakDuration.disabled = breakRunning;
+  }
+
+  function tick() {
+    if (isBreakRunning()) {
+      const remaining = getBreakRemainingMs();
+      renderTimer();
+      updateButtons();
+
+      if (remaining <= 0) {
+        finishBreak(true);
+      }
+      return;
+    }
+
+    renderTimer();
+    updateButtons();
   }
 
   function startTicking() {
     if (tickInterval) return;
-    tickInterval = setInterval(() => {
-      renderTimer();
-      updateButtons();
-    }, 1000);
+    tickInterval = setInterval(tick, 1000);
   }
 
   function stopTicking() {
@@ -529,6 +597,8 @@
   }
 
   function handleSave() {
+    if (isBreakRunning()) return;
+
     const elapsedMs = getCurrentElapsedMs();
     if (elapsedMs < 1000 || !state.active.startTime) return;
 
@@ -564,6 +634,88 @@
     stopTicking();
   }
 
+  function getBreakDurationMinutes() {
+    const value = Number(els.breakDuration.value);
+    if (!Number.isFinite(value)) return 0;
+    return Math.min(120, Math.max(1, Math.round(value)));
+  }
+
+  function saveBreakSession(startDate, endDate, plannedMinutes) {
+    const elapsedMinutes = Math.max(1, Math.round((endDate - startDate) / 60000));
+    const durationMinutes = Math.min(plannedMinutes, elapsedMinutes);
+
+    state.sessions.push({
+      id: createSessionId(),
+      type: 'break',
+      startTime: formatClock(startDate),
+      endTime: formatClock(endDate),
+      durationMinutes
+    });
+  }
+
+  function finishBreak(completed) {
+    if (!state.breakActive) return;
+
+    const { startTime, plannedMinutes, startedAt } = state.breakActive;
+    const startDate = new Date(startedAt);
+    const endDate = completed
+      ? new Date(state.breakActive.endsAt)
+      : new Date();
+
+    saveBreakSession(startDate, endDate, plannedMinutes);
+    state.breakActive = null;
+
+    saveState();
+    renderAll();
+    stopTicking();
+
+    if (completed) {
+      showUndoToast('Mola tamamlandı');
+      undoBuffer = null;
+    }
+  }
+
+  function handleBreakStart() {
+    if (isBreakRunning()) return;
+
+    const plannedMinutes = getBreakDurationMinutes();
+    if (plannedMinutes < 1) return;
+
+    if (state.active.runningSince) {
+      handleStop();
+    }
+
+    const now = new Date();
+    state.breakActive = {
+      startTime: formatClock(now),
+      startedAt: now.getTime(),
+      plannedMinutes,
+      endsAt: now.getTime() + plannedMinutes * 60000
+    };
+
+    els.breakDuration.value = String(plannedMinutes);
+    saveState();
+    renderAll();
+    startTicking();
+  }
+
+  function handleBreakCancel() {
+    if (!isBreakRunning()) return;
+
+    const elapsedMs = Date.now() - state.breakActive.startedAt;
+    if (elapsedMs >= 60000) {
+      finishBreak(false);
+      showUndoToast('Mola kaydedildi');
+      undoBuffer = null;
+      return;
+    }
+
+    state.breakActive = null;
+    saveState();
+    renderAll();
+    stopTicking();
+  }
+
   function renderAll() {
     renderTimer();
     renderDailyTotal();
@@ -578,12 +730,15 @@
       state = createFreshState();
       saveState();
       renderAll();
+      stopTicking();
     }
   }
 
   els.btnStart.addEventListener('click', handleStart);
   els.btnStop.addEventListener('click', handleStop);
   els.btnSave.addEventListener('click', handleSave);
+  els.btnBreakStart.addEventListener('click', handleBreakStart);
+  els.btnBreakCancel.addEventListener('click', handleBreakCancel);
   els.toastUndo.addEventListener('click', undoDelete);
 
   els.tagInput.addEventListener('keydown', (e) => {
@@ -598,8 +753,14 @@
       saveState();
     } else {
       checkDateReset();
+
+      if (state.breakActive && Date.now() >= state.breakActive.endsAt) {
+        finishBreak(true);
+        return;
+      }
+
       renderAll();
-      if (state.active.runningSince) startTicking();
+      if (state.active.runningSince || isBreakRunning()) startTicking();
     }
   });
 
@@ -610,7 +771,7 @@
   loadState();
   renderAll();
 
-  if (state.active.runningSince) {
+  if (state.active.runningSince || isBreakRunning()) {
     startTicking();
   }
 })();
