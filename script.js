@@ -45,13 +45,17 @@
     toastMsg: document.getElementById('toastMsg'),
     toastUndo: document.getElementById('toastUndo'),
     chartCanvas: document.getElementById('periodChart'),
-    chartLegend: document.getElementById('chartLegend')
+    chartLegend: document.getElementById('chartLegend'),
+    libraryShelf: document.getElementById('libraryShelf'),
+    libraryCount: document.getElementById('libraryCount')
   };
 
   let chart = null;
   let tickInterval = null;
   let toastTimeout = null;
   let undoBuffer = null;
+  let openLibraryDay = null;
+  let historyArchive = {};
 
   let state = {
     date: getTodayKey(),
@@ -146,6 +150,68 @@
     return `Bugün Toplam: ${hours} Saat ${mins} Dakika`;
   }
 
+  function formatTotalShort(totalMinutes) {
+    const hours = Math.floor(totalMinutes / 60);
+    const mins = Math.round(totalMinutes % 60);
+    if (hours === 0) return `${mins} dk`;
+    return `${hours}s ${mins}dk`;
+  }
+
+  function parseDateKey(dateKey) {
+    const [y, m, d] = dateKey.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }
+
+  function formatDateKeyLabel(dateKey) {
+    const todayDate = parseDateKey(getTodayKey());
+    const date = parseDateKey(dateKey);
+    const diffDays = Math.round((todayDate - date) / 86400000);
+
+    if (diffDays === 1) return 'Dün';
+    if (diffDays === 2) return 'Evvelsi Gün';
+
+    return date.toLocaleDateString('tr-TR', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      weekday: 'short'
+    });
+  }
+
+  function getStudyTotalForSessions(sessions) {
+    return sessions
+      .filter(isStudySession)
+      .reduce((sum, session) => sum + session.durationMinutes, 0);
+  }
+
+  function archiveDay(dateKey, sessions) {
+    if (!sessions || sessions.length === 0) return;
+    historyArchive[dateKey] = {
+      sessions: sessions.map(session => ({ ...session }))
+    };
+  }
+
+  function getHistoryDayKeys() {
+    return Object.keys(historyArchive)
+      .filter(key => key !== getTodayKey() && historyArchive[key].sessions?.length)
+      .sort((a, b) => b.localeCompare(a));
+  }
+
+  function ensureHistorySessionIds() {
+    let migrated = false;
+
+    Object.values(historyArchive).forEach(day => {
+      day.sessions.forEach(session => {
+        if (!session.id) {
+          session.id = createSessionId();
+          migrated = true;
+        }
+      });
+    });
+
+    if (migrated) saveState();
+  }
+
   function getBreakRemainingMs() {
     if (!state.breakActive) return 0;
     return Math.max(0, state.breakActive.endsAt - Date.now());
@@ -165,17 +231,47 @@
       if (!raw) return;
 
       const parsed = JSON.parse(raw);
-      if (parsed.date !== getTodayKey()) {
-        state = createFreshState();
+      const today = getTodayKey();
+
+      if (parsed.version === 2) {
+        historyArchive = parsed.archive && typeof parsed.archive === 'object'
+          ? parsed.archive
+          : {};
+
+        if (parsed.date === today) {
+          state = {
+            date: parsed.date,
+            sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
+            active: parsed.active || createFreshState().active,
+            breakActive: parsed.breakActive || null
+          };
+        } else {
+          if (Array.isArray(parsed.sessions) && parsed.sessions.length) {
+            archiveDay(parsed.date, parsed.sessions);
+          }
+          state = createFreshState();
+        }
+      } else if (parsed.date) {
+        historyArchive = {};
+
+        if (parsed.date !== today && Array.isArray(parsed.sessions) && parsed.sessions.length) {
+          archiveDay(parsed.date, parsed.sessions);
+          state = createFreshState();
+        } else if (parsed.date === today) {
+          state = {
+            date: parsed.date,
+            sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
+            active: parsed.active || createFreshState().active,
+            breakActive: parsed.breakActive || null
+          };
+        } else {
+          state = createFreshState();
+        }
+
+        saveState();
+      } else {
         return;
       }
-
-      state = {
-        date: parsed.date,
-        sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
-        active: parsed.active || createFreshState().active,
-        breakActive: parsed.breakActive || null
-      };
 
       if (state.active.runningSince) {
         state.active.runningSince = Date.now();
@@ -186,8 +282,10 @@
       }
 
       ensureSessionIds();
+      ensureHistorySessionIds();
     } catch {
       state = createFreshState();
+      historyArchive = {};
     }
   }
 
@@ -217,10 +315,12 @@
     }
 
     storage.set(STORAGE_KEY, JSON.stringify({
+      version: 2,
       date: state.date,
       sessions: state.sessions,
       active,
-      breakActive: state.breakActive
+      breakActive: state.breakActive,
+      archive: historyArchive
     }));
 
     state.active.elapsedMs = active.elapsedMs;
@@ -385,6 +485,34 @@
     renderAll();
   }
 
+  function buildSessionMetaElements(session, meta) {
+    const metaEl = document.createElement('div');
+    metaEl.className = 'session-meta';
+
+    if (meta.tag) {
+      const tagEl = document.createElement('span');
+      tagEl.className = 'session-tag';
+      tagEl.textContent = meta.tag;
+
+      const sepEl = document.createElement('span');
+      sepEl.className = 'session-sep';
+      sepEl.textContent = '|';
+
+      const durationEl = document.createElement('span');
+      durationEl.className = 'session-duration';
+      durationEl.textContent = meta.duration;
+
+      metaEl.append(tagEl, sepEl, durationEl);
+    } else {
+      const durationEl = document.createElement('span');
+      durationEl.className = 'session-duration';
+      durationEl.textContent = meta.duration;
+      metaEl.appendChild(durationEl);
+    }
+
+    return metaEl;
+  }
+
   function renderSessionList() {
     els.sessionList.innerHTML = '';
     renderSessionCount();
@@ -410,29 +538,7 @@
       timeEl.className = 'session-time';
       timeEl.textContent = `${session.startTime} - ${session.endTime}`;
 
-      const metaEl = document.createElement('div');
-      metaEl.className = 'session-meta';
-
-      if (meta.tag) {
-        const tagEl = document.createElement('span');
-        tagEl.className = 'session-tag';
-        tagEl.textContent = meta.tag;
-
-        const sepEl = document.createElement('span');
-        sepEl.className = 'session-sep';
-        sepEl.textContent = '|';
-
-        const durationEl = document.createElement('span');
-        durationEl.className = 'session-duration';
-        durationEl.textContent = meta.duration;
-
-        metaEl.append(tagEl, sepEl, durationEl);
-      } else {
-        const durationEl = document.createElement('span');
-        durationEl.className = 'session-duration';
-        durationEl.textContent = meta.duration;
-        metaEl.appendChild(durationEl);
-      }
+      const metaEl = buildSessionMetaElements(session, meta);
 
       body.append(timeEl, metaEl);
 
@@ -445,6 +551,89 @@
 
       li.append(body, deleteBtn);
       els.sessionList.appendChild(li);
+    });
+  }
+
+  function renderLibrary() {
+    const dayKeys = getHistoryDayKeys();
+    els.libraryShelf.innerHTML = '';
+
+    if (dayKeys.length === 0) {
+      const empty = document.createElement('p');
+      empty.className = 'library-empty';
+      empty.textContent = 'Henüz arşivlenmiş gün yok. Bugün kayıt oluştur — yarın burada görünecek.';
+      els.libraryShelf.appendChild(empty);
+      els.libraryCount.hidden = true;
+      return;
+    }
+
+    els.libraryCount.hidden = false;
+    els.libraryCount.textContent = `${dayKeys.length} gün`;
+
+    dayKeys.forEach(dateKey => {
+      const day = historyArchive[dateKey];
+      const sessions = day.sessions || [];
+      const studyTotal = getStudyTotalForSessions(sessions);
+      const isOpen = openLibraryDay === dateKey;
+
+      const book = document.createElement('article');
+      book.className = 'library-book' + (isOpen ? ' is-open' : '');
+
+      const spine = document.createElement('button');
+      spine.className = 'library-book-spine';
+      spine.type = 'button';
+      spine.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+
+      const info = document.createElement('div');
+      info.className = 'library-book-info';
+
+      const dateEl = document.createElement('span');
+      dateEl.className = 'library-book-date';
+      dateEl.textContent = formatDateKeyLabel(dateKey);
+
+      const detailEl = document.createElement('span');
+      detailEl.className = 'library-book-detail';
+      detailEl.textContent = `${sessions.length} kayıt · ${formatTotalShort(studyTotal)} çalışma`;
+
+      info.append(dateEl, detailEl);
+
+      const totalEl = document.createElement('span');
+      totalEl.className = 'library-book-total';
+      totalEl.textContent = formatTotalShort(studyTotal);
+
+      const chevron = document.createElement('span');
+      chevron.className = 'library-book-chevron';
+      chevron.textContent = '›';
+
+      spine.append(info, totalEl, chevron);
+      spine.addEventListener('click', () => {
+        openLibraryDay = openLibraryDay === dateKey ? null : dateKey;
+        renderLibrary();
+      });
+
+      const pages = document.createElement('div');
+      pages.className = 'library-book-pages';
+      pages.hidden = !isOpen;
+
+      const list = document.createElement('ul');
+      list.className = 'library-session-list';
+
+      [...sessions].reverse().forEach(session => {
+        const meta = formatSessionMeta(session);
+        const li = document.createElement('li');
+        li.className = 'library-session-item' + (isBreakSession(session) ? ' session-break' : '');
+
+        const timeEl = document.createElement('span');
+        timeEl.className = 'session-time';
+        timeEl.textContent = `${session.startTime} - ${session.endTime}`;
+
+        li.append(timeEl, buildSessionMetaElements(session, meta));
+        list.appendChild(li);
+      });
+
+      pages.appendChild(list);
+      book.append(spine, pages);
+      els.libraryShelf.appendChild(book);
     });
   }
 
@@ -721,13 +910,16 @@
     renderDailyTotal();
     renderSessionList();
     renderChart();
+    renderLibrary();
     updateButtons();
   }
 
   function checkDateReset() {
     const today = getTodayKey();
     if (state.date !== today) {
+      archiveDay(state.date, state.sessions);
       state = createFreshState();
+      openLibraryDay = null;
       saveState();
       renderAll();
       stopTicking();

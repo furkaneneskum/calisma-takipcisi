@@ -867,6 +867,204 @@ body::before {
   border-radius: 2px;
 }
 
+/* Library Archive */
+.library-panel {
+  margin-top: 2rem;
+}
+
+.library-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.library-title {
+  margin-bottom: 0.35rem;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.library-subtitle {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+
+.library-count {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+  flex-shrink: 0;
+  padding-top: 0.15rem;
+}
+
+.library-shelf {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  max-height: 420px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.library-shelf::-webkit-scrollbar {
+  width: 4px;
+}
+
+.library-shelf::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 2px;
+}
+
+.library-empty {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 2rem 1rem;
+  letter-spacing: 0.04em;
+  line-height: 1.6;
+}
+
+.library-book {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-deep);
+  overflow: hidden;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.library-book.is-open {
+  border-color: rgba(168, 85, 247, 0.35);
+  box-shadow: 0 0 20px rgba(168, 85, 247, 0.08);
+}
+
+.library-book-spine {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.85rem 1rem;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-mono);
+  touch-action: manipulation;
+  transition: background var(--transition);
+}
+
+.library-book-spine:hover {
+  background: var(--bg-panel-hover);
+}
+
+.library-book-spine::before {
+  content: '';
+  width: 4px;
+  align-self: stretch;
+  min-height: 2.5rem;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--neon-purple), var(--neon-cyan));
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.library-book.is-open .library-book-spine::before {
+  opacity: 1;
+  box-shadow: 0 0 10px var(--glow-purple);
+}
+
+.library-book-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.library-book-date {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  letter-spacing: 0.03em;
+}
+
+.library-book-detail {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+
+.library-book-total {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--neon-purple);
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+  text-shadow: 0 0 12px var(--glow-purple);
+}
+
+.library-book-chevron {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  transition: transform var(--transition), color var(--transition);
+}
+
+.library-book.is-open .library-book-chevron {
+  transform: rotate(90deg);
+  color: var(--neon-purple);
+}
+
+.library-book-pages {
+  border-top: 1px solid var(--border);
+  padding: 0.65rem 0.85rem 0.85rem;
+  background: rgba(17, 17, 24, 0.5);
+}
+
+.library-book-pages[hidden] {
+  display: none;
+}
+
+.library-session-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.library-session-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.68rem;
+  background: var(--bg-panel);
+}
+
+.library-session-item.session-break {
+  border-color: rgba(245, 158, 11, 0.25);
+}
+
+.library-session-item .session-time {
+  font-size: 0.7rem;
+}
+
+.library-session-item .session-tag {
+  color: var(--neon-purple);
+}
+
+.library-session-item.session-break .session-time,
+.library-session-item.session-break .session-tag {
+  color: #f59e0b;
+}
+
 /* Responsive */
 @media (max-width: 1024px) {
   .main-grid {
