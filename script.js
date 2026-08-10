@@ -184,16 +184,109 @@
       .reduce((sum, session) => sum + session.durationMinutes, 0);
   }
 
+  function readGoalsFromStorage(dateKey) {
+    try {
+      const raw = storage.get(`studyTracker_goals_${dateKey}`);
+      if (!raw) return [];
+
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+
+      return parsed
+        .map(goal => ({
+          id: goal.id || createSessionId(),
+          text: String(goal.text || '').trim(),
+          done: Boolean(goal.done)
+        }))
+        .filter(goal => goal.text);
+    } catch {
+      return [];
+    }
+  }
+
+  function getDayGoals(dateKey, day) {
+    if (day.goals && day.goals.length) return day.goals;
+    return readGoalsFromStorage(dateKey);
+  }
+
   function archiveDay(dateKey, sessions) {
-    if (!sessions || sessions.length === 0) return;
+    const existing = historyArchive[dateKey];
+    let sessionList;
+
+    if (sessions !== null && sessions !== undefined) {
+      sessionList = Array.isArray(sessions)
+        ? sessions.map(session => ({ ...session }))
+        : [];
+    } else {
+      sessionList = existing?.sessions ? [...existing.sessions] : [];
+    }
+
+    const goalsFromStorage = readGoalsFromStorage(dateKey);
+    const goalList = goalsFromStorage.length
+      ? goalsFromStorage
+      : (existing?.goals ? [...existing.goals] : []);
+
+    if (sessionList.length === 0 && goalList.length === 0) return;
+
     historyArchive[dateKey] = {
-      sessions: sessions.map(session => ({ ...session }))
+      sessions: sessionList,
+      goals: goalList
     };
+  }
+
+  function syncGoalsArchiveFromStorage() {
+    const today = getTodayKey();
+    let migrated = false;
+
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith('studyTracker_goals_')) continue;
+
+      const dateKey = key.slice('studyTracker_goals_'.length);
+      if (!dateKey || dateKey >= today) continue;
+
+      const goals = readGoalsFromStorage(dateKey);
+      if (!goals.length) continue;
+
+      const existing = historyArchive[dateKey];
+      if (!existing) {
+        historyArchive[dateKey] = { sessions: [], goals };
+        migrated = true;
+        continue;
+      }
+
+      if (!existing.goals || existing.goals.length === 0) {
+        existing.goals = goals;
+        migrated = true;
+      }
+    }
+
+    if (migrated) saveState();
+  }
+
+  function formatLibraryDetail(sessions, goals) {
+    const parts = [];
+
+    if (sessions.length) parts.push(`${sessions.length} kayıt`);
+
+    if (goals.length) {
+      const done = goals.filter(goal => goal.done).length;
+      parts.push(`${done}/${goals.length} hedef`);
+    }
+
+    const studyTotal = getStudyTotalForSessions(sessions);
+    if (studyTotal > 0) parts.push(`${formatTotalShort(studyTotal)} çalışma`);
+
+    return parts.length ? parts.join(' · ') : 'Kayıt yok';
   }
 
   function getHistoryDayKeys() {
     return Object.keys(historyArchive)
-      .filter(key => key !== getTodayKey() && historyArchive[key].sessions?.length)
+      .filter(key => {
+        if (key === getTodayKey()) return false;
+        const day = historyArchive[key];
+        return day.sessions?.length || day.goals?.length;
+      })
       .sort((a, b) => b.localeCompare(a));
   }
 
@@ -246,15 +339,13 @@
             breakActive: parsed.breakActive || null
           };
         } else {
-          if (Array.isArray(parsed.sessions) && parsed.sessions.length) {
-            archiveDay(parsed.date, parsed.sessions);
-          }
+          archiveDay(parsed.date, parsed.sessions);
           state = createFreshState();
         }
       } else if (parsed.date) {
         historyArchive = {};
 
-        if (parsed.date !== today && Array.isArray(parsed.sessions) && parsed.sessions.length) {
+        if (parsed.date !== today) {
           archiveDay(parsed.date, parsed.sessions);
           state = createFreshState();
         } else if (parsed.date === today) {
@@ -283,6 +374,7 @@
 
       ensureSessionIds();
       ensureHistorySessionIds();
+      syncGoalsArchiveFromStorage();
     } catch {
       state = createFreshState();
       historyArchive = {};
@@ -561,7 +653,7 @@
     if (dayKeys.length === 0) {
       const empty = document.createElement('p');
       empty.className = 'library-empty';
-      empty.textContent = 'Henüz arşivlenmiş gün yok. Bugün kayıt oluştur — yarın burada görünecek.';
+      empty.textContent = 'Henüz arşivlenmiş gün yok. Bugün kayıt veya hedef oluştur — yarın burada görünecek.';
       els.libraryShelf.appendChild(empty);
       els.libraryCount.hidden = true;
       return;
@@ -573,6 +665,7 @@
     dayKeys.forEach(dateKey => {
       const day = historyArchive[dateKey];
       const sessions = day.sessions || [];
+      const goals = getDayGoals(dateKey, day);
       const studyTotal = getStudyTotalForSessions(sessions);
       const isOpen = openLibraryDay === dateKey;
 
@@ -593,7 +686,7 @@
 
       const detailEl = document.createElement('span');
       detailEl.className = 'library-book-detail';
-      detailEl.textContent = `${sessions.length} kayıt · ${formatTotalShort(studyTotal)} çalışma`;
+      detailEl.textContent = formatLibraryDetail(sessions, goals);
 
       info.append(dateEl, detailEl);
 
@@ -615,23 +708,63 @@
       pages.className = 'library-book-pages';
       pages.hidden = !isOpen;
 
-      const list = document.createElement('ul');
-      list.className = 'library-session-list';
+      if (sessions.length) {
+        const sessionsTitle = document.createElement('h3');
+        sessionsTitle.className = 'library-section-title';
+        sessionsTitle.textContent = 'Çalışma Kayıtları';
 
-      [...sessions].reverse().forEach(session => {
-        const meta = formatSessionMeta(session);
-        const li = document.createElement('li');
-        li.className = 'library-session-item' + (isBreakSession(session) ? ' session-break' : '');
+        const list = document.createElement('ul');
+        list.className = 'library-session-list';
 
-        const timeEl = document.createElement('span');
-        timeEl.className = 'session-time';
-        timeEl.textContent = `${session.startTime} - ${session.endTime}`;
+        [...sessions].reverse().forEach(session => {
+          const meta = formatSessionMeta(session);
+          const li = document.createElement('li');
+          li.className = 'library-session-item' + (isBreakSession(session) ? ' session-break' : '');
 
-        li.append(timeEl, buildSessionMetaElements(session, meta));
-        list.appendChild(li);
-      });
+          const timeEl = document.createElement('span');
+          timeEl.className = 'session-time';
+          timeEl.textContent = `${session.startTime} - ${session.endTime}`;
 
-      pages.appendChild(list);
+          li.append(timeEl, buildSessionMetaElements(session, meta));
+          list.appendChild(li);
+        });
+
+        pages.append(sessionsTitle, list);
+      }
+
+      if (goals.length) {
+        const goalsTitle = document.createElement('h3');
+        goalsTitle.className = 'library-section-title';
+        goalsTitle.textContent = 'Günün Hedefleri';
+
+        const goalsList = document.createElement('ul');
+        goalsList.className = 'library-goals-list';
+
+        goals.forEach(goal => {
+          const li = document.createElement('li');
+          li.className = 'library-goal-item' + (goal.done ? ' is-done' : '');
+
+          const mark = document.createElement('span');
+          mark.className = 'library-goal-mark';
+          mark.textContent = goal.done ? '✓' : '○';
+
+          const text = document.createElement('span');
+          text.textContent = goal.text;
+
+          li.append(mark, text);
+          goalsList.appendChild(li);
+        });
+
+        pages.append(goalsTitle, goalsList);
+      }
+
+      if (!sessions.length && !goals.length) {
+        const emptyDay = document.createElement('p');
+        emptyDay.className = 'library-empty';
+        emptyDay.textContent = 'Bu gün için kayıt bulunamadı.';
+        pages.appendChild(emptyDay);
+      }
+
       book.append(spine, pages);
       els.libraryShelf.appendChild(book);
     });
@@ -959,6 +1092,12 @@
   window.addEventListener('beforeunload', saveState);
 
   setInterval(checkDateReset, 60000);
+
+  window.studyTrackerArchivePastDay = function (dateKey, sessions) {
+    archiveDay(dateKey, sessions);
+    saveState();
+    renderLibrary();
+  };
 
   loadState();
   renderAll();
@@ -1376,6 +1515,13 @@
   function refreshForToday() {
     const today = getTodayKey();
     if (today !== loadedDateKey) {
+      const previousDateKey = loadedDateKey;
+      saveGoals();
+
+      if (previousDateKey && window.studyTrackerArchivePastDay) {
+        window.studyTrackerArchivePastDay(previousDateKey, null);
+      }
+
       loadGoals();
       renderGoals();
     }
