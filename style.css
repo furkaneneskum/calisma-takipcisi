@@ -121,6 +121,13 @@ body::before {
   border-bottom: 1px solid var(--border);
 }
 
+.panel-left-col {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
 .panel-left {
   min-width: 0;
 }
@@ -154,7 +161,7 @@ body::before {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  max-height: 420px;
+  max-height: 280px;
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: thin;
@@ -295,6 +302,260 @@ body::before {
   padding: 2rem 0;
   text-align: center;
   letter-spacing: 0.05em;
+}
+
+/* Daily Goals */
+.panel-goals {
+  min-width: 0;
+}
+
+.goals-title {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 0.85rem;
+}
+
+.goals-progress {
+  margin-bottom: 1rem;
+}
+
+.goals-progress-track {
+  height: 4px;
+  background: rgba(0, 212, 255, 0.12);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 0.45rem;
+}
+
+.goals-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--neon-cyan), var(--neon-purple));
+  border-radius: 2px;
+  box-shadow: 0 0 10px var(--glow-cyan);
+  transition: width 0.35s ease;
+}
+
+.goals-progress-text {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  letter-spacing: 0.06em;
+}
+
+.goals-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  max-height: 200px;
+  overflow-y: auto;
+  margin-bottom: 1rem;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.goals-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.goals-list::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 2px;
+}
+
+.goal-item {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.6rem 0.7rem;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition:
+    border-color var(--transition),
+    background var(--transition),
+    box-shadow 0.35s ease;
+}
+
+.goal-item:hover {
+  border-color: var(--border-hover);
+  background: var(--bg-panel-hover);
+}
+
+.goal-item.is-done .goal-text {
+  text-decoration: line-through;
+  opacity: 0.45;
+  color: var(--text-secondary);
+}
+
+.goal-item.just-completed {
+  border-color: rgba(0, 212, 255, 0.45);
+  box-shadow: 0 0 18px rgba(0, 212, 255, 0.2);
+}
+
+.goal-check {
+  position: relative;
+  flex-shrink: 0;
+  width: 1.15rem;
+  height: 1.15rem;
+  padding: 0;
+  background: transparent;
+  border: 1px solid rgba(0, 212, 255, 0.45);
+  border-radius: 3px;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    border-color var(--transition),
+    box-shadow var(--transition),
+    background var(--transition);
+}
+
+.goal-check:hover {
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 10px rgba(0, 212, 255, 0.25);
+}
+
+.goal-check-mark {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  color: var(--neon-cyan);
+  opacity: 0;
+  transform: scale(0.6);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  text-shadow: 0 0 8px var(--glow-cyan);
+}
+
+.goal-item.is-done .goal-check {
+  background: rgba(0, 212, 255, 0.12);
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 12px rgba(0, 212, 255, 0.3);
+}
+
+.goal-item.is-done .goal-check-mark {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.goal-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.7rem;
+  color: var(--text-primary);
+  letter-spacing: 0.02em;
+  line-height: 1.4;
+  word-break: break-word;
+  transition: opacity var(--transition), color var(--transition);
+}
+
+.goal-delete {
+  flex-shrink: 0;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 0.75rem;
+  line-height: 1;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  cursor: pointer;
+  opacity: 0;
+  touch-action: manipulation;
+  transition:
+    opacity var(--transition),
+    color var(--transition),
+    border-color var(--transition),
+    background var(--transition);
+}
+
+.goal-item:hover .goal-delete,
+.goal-delete:focus-visible {
+  opacity: 0.85;
+}
+
+@media (hover: none) {
+  .goal-delete {
+    opacity: 0.55;
+  }
+}
+
+.goal-delete:hover {
+  color: var(--neon-red);
+  border-color: rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.goals-add {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--border);
+}
+
+.goals-input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-primary);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  padding: 0.45rem 0.2rem;
+  outline: none;
+  transition: border-color var(--transition), color var(--transition);
+}
+
+.goals-input::placeholder {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+}
+
+.goals-input:focus {
+  border-bottom-color: var(--neon-cyan);
+  color: var(--neon-cyan);
+}
+
+.goals-add-btn {
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--neon-cyan);
+  background: rgba(0, 212, 255, 0.06);
+  border: 1px solid rgba(0, 212, 255, 0.35);
+  border-radius: var(--radius);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    border-color var(--transition),
+    background var(--transition),
+    box-shadow var(--transition),
+    transform 0.1s ease;
+}
+
+.goals-add-btn:hover {
+  border-color: var(--neon-cyan);
+  background: rgba(0, 212, 255, 0.12);
+  box-shadow: 0 0 14px rgba(0, 212, 255, 0.2);
+}
+
+.goals-add-btn:active {
+  transform: scale(0.94);
 }
 
 /* Timer Center */
@@ -1079,7 +1340,11 @@ body::before {
   }
 
   .session-list {
-    max-height: 240px;
+    max-height: 200px;
+  }
+
+  .goals-list {
+    max-height: 160px;
   }
 }
 

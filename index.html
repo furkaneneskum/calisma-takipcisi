@@ -21,15 +21,40 @@
     </header>
 
     <main class="main-grid">
-      <aside class="panel panel-left">
-        <div class="panel-header">
-          <h2 class="panel-title">Bugünün Kayıtları</h2>
-          <span class="session-count" id="sessionCount" hidden></span>
-        </div>
-        <ul class="session-list" id="sessionList">
-          <li class="session-empty">Henüz kayıt yok</li>
-        </ul>
-      </aside>
+      <div class="panel-left-col">
+        <aside class="panel panel-left">
+          <div class="panel-header">
+            <h2 class="panel-title">Bugünün Kayıtları</h2>
+            <span class="session-count" id="sessionCount" hidden></span>
+          </div>
+          <ul class="session-list" id="sessionList">
+            <li class="session-empty">Henüz kayıt yok</li>
+          </ul>
+        </aside>
+
+        <aside class="panel panel-goals" aria-label="Bugünkü hedefler">
+          <h2 class="panel-title goals-title">🎯 Bugünkü Hedeflerim</h2>
+          <div class="goals-progress">
+            <div class="goals-progress-track" aria-hidden="true">
+              <div class="goals-progress-fill" id="goalsProgressFill"></div>
+            </div>
+            <p class="goals-progress-text" id="goalsProgressText">0/3 Tamamlandı — %0</p>
+          </div>
+          <ul class="goals-list" id="goalsList"></ul>
+          <div class="goals-add">
+            <input
+              class="goals-input"
+              id="goalInput"
+              type="text"
+              placeholder="+ Yeni hedef ekle..."
+              maxlength="80"
+              autocomplete="off"
+              spellcheck="false"
+            >
+            <button class="goals-add-btn" id="goalAddBtn" type="button" aria-label="Hedef ekle">+</button>
+          </div>
+        </aside>
+      </div>
 
       <section class="panel panel-center">
         <div class="timer-wrapper">
