@@ -54,7 +54,6 @@
   let tickInterval = null;
   let toastTimeout = null;
   let undoBuffer = null;
-  let openLibraryDay = null;
   let historyArchive = {};
 
   let state = {
@@ -178,6 +177,105 @@
     });
   }
 
+  function formatDateKeyFull(dateKey) {
+    return parseDateKey(dateKey).toLocaleDateString('tr-TR', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      weekday: 'long'
+    });
+  }
+
+  function getBreakTotalForSessions(sessions) {
+    return sessions
+      .filter(isBreakSession)
+      .reduce((sum, session) => sum + session.durationMinutes, 0);
+  }
+
+  function createLibraryStatBox(label, value, modifier) {
+    const box = document.createElement('div');
+    box.className = 'library-stat-box' + (modifier ? ` ${modifier}` : '');
+
+    const labelEl = document.createElement('span');
+    labelEl.className = 'library-stat-label';
+    labelEl.textContent = label;
+
+    const valueEl = document.createElement('span');
+    valueEl.className = 'library-stat-value';
+    valueEl.textContent = value;
+
+    box.append(labelEl, valueEl);
+    return box;
+  }
+
+  function createLibrarySessionTile(session) {
+    const meta = formatSessionMeta(session);
+    const tile = document.createElement('div');
+    tile.className = 'library-session-tile' + (isBreakSession(session) ? ' is-break' : '');
+
+    const timeEl = document.createElement('span');
+    timeEl.className = 'library-tile-time';
+    timeEl.textContent = `${session.startTime} – ${session.endTime}`;
+
+    const metaEl = document.createElement('div');
+    metaEl.className = 'library-tile-meta';
+
+    if (meta.tag) {
+      const tagEl = document.createElement('span');
+      tagEl.className = 'library-tile-tag';
+      tagEl.textContent = meta.tag;
+      metaEl.appendChild(tagEl);
+    }
+
+    const durationEl = document.createElement('span');
+    durationEl.className = 'library-tile-duration';
+    durationEl.textContent = meta.duration;
+    metaEl.appendChild(durationEl);
+
+    tile.append(timeEl, metaEl);
+    return tile;
+  }
+
+  function createLibraryGoalTile(goal) {
+    const tile = document.createElement('div');
+    tile.className = 'library-goal-tile' + (goal.done ? ' is-done' : '');
+
+    const mark = document.createElement('span');
+    mark.className = 'library-goal-tile-mark';
+    mark.textContent = goal.done ? '✓' : '○';
+
+    const text = document.createElement('span');
+    text.className = 'library-goal-tile-text';
+    text.textContent = goal.text;
+
+    tile.append(mark, text);
+    return tile;
+  }
+
+  function createLibrarySection(title, emptyText, tiles, createTile) {
+    const section = document.createElement('section');
+    section.className = 'library-card-section';
+
+    const titleEl = document.createElement('h3');
+    titleEl.className = 'library-section-title';
+    titleEl.textContent = title;
+    section.appendChild(titleEl);
+
+    if (!tiles.length) {
+      const empty = document.createElement('p');
+      empty.className = 'library-section-empty';
+      empty.textContent = emptyText;
+      section.appendChild(empty);
+      return section;
+    }
+
+    const grid = document.createElement('div');
+    grid.className = 'library-tile-grid';
+    tiles.forEach(item => grid.appendChild(createTile(item)));
+    section.appendChild(grid);
+    return section;
+  }
+
   function getStudyTotalForSessions(sessions) {
     return sessions
       .filter(isStudySession)
@@ -262,22 +360,6 @@
     }
 
     if (migrated) saveState();
-  }
-
-  function formatLibraryDetail(sessions, goals) {
-    const parts = [];
-
-    if (sessions.length) parts.push(`${sessions.length} kayıt`);
-
-    if (goals.length) {
-      const done = goals.filter(goal => goal.done).length;
-      parts.push(`${done}/${goals.length} hedef`);
-    }
-
-    const studyTotal = getStudyTotalForSessions(sessions);
-    if (studyTotal > 0) parts.push(`${formatTotalShort(studyTotal)} çalışma`);
-
-    return parts.length ? parts.join(' · ') : 'Kayıt yok';
   }
 
   function getHistoryDayKeys() {
@@ -649,8 +731,10 @@
   function renderLibrary() {
     const dayKeys = getHistoryDayKeys();
     els.libraryShelf.innerHTML = '';
+    els.libraryShelf.className = 'library-shelf library-grid';
 
     if (dayKeys.length === 0) {
+      els.libraryShelf.className = 'library-shelf';
       const empty = document.createElement('p');
       empty.className = 'library-empty';
       empty.textContent = 'Henüz arşivlenmiş gün yok. Bugün kayıt veya hedef oluştur — yarın burada görünecek.';
@@ -667,106 +751,64 @@
       const sessions = day.sessions || [];
       const goals = getDayGoals(dateKey, day);
       const studyTotal = getStudyTotalForSessions(sessions);
-      const isOpen = openLibraryDay === dateKey;
+      const breakTotal = getBreakTotalForSessions(sessions);
+      const studyCount = sessions.filter(isStudySession).length;
+      const breakCount = sessions.filter(isBreakSession).length;
+      const goalsDone = goals.filter(goal => goal.done).length;
 
-      const book = document.createElement('article');
-      book.className = 'library-book' + (isOpen ? ' is-open' : '');
+      const card = document.createElement('article');
+      card.className = 'library-card';
 
-      const spine = document.createElement('button');
-      spine.className = 'library-book-spine';
-      spine.type = 'button';
-      spine.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      const header = document.createElement('header');
+      header.className = 'library-card-header';
 
-      const info = document.createElement('div');
-      info.className = 'library-book-info';
+      const dateWrap = document.createElement('div');
+      dateWrap.className = 'library-card-date-wrap';
 
-      const dateEl = document.createElement('span');
-      dateEl.className = 'library-book-date';
+      const dateEl = document.createElement('h3');
+      dateEl.className = 'library-card-date';
       dateEl.textContent = formatDateKeyLabel(dateKey);
 
-      const detailEl = document.createElement('span');
-      detailEl.className = 'library-book-detail';
-      detailEl.textContent = formatLibraryDetail(sessions, goals);
+      const dateFullEl = document.createElement('p');
+      dateFullEl.className = 'library-card-date-full';
+      dateFullEl.textContent = formatDateKeyFull(dateKey);
 
-      info.append(dateEl, detailEl);
+      dateWrap.append(dateEl, dateFullEl);
 
-      const totalEl = document.createElement('span');
-      totalEl.className = 'library-book-total';
-      totalEl.textContent = formatTotalShort(studyTotal);
+      const badge = document.createElement('span');
+      badge.className = 'library-card-badge';
+      badge.textContent = studyTotal > 0 ? formatTotalShort(studyTotal) : '—';
 
-      const chevron = document.createElement('span');
-      chevron.className = 'library-book-chevron';
-      chevron.textContent = '›';
+      header.append(dateWrap, badge);
 
-      spine.append(info, totalEl, chevron);
-      spine.addEventListener('click', () => {
-        openLibraryDay = openLibraryDay === dateKey ? null : dateKey;
-        renderLibrary();
-      });
+      const stats = document.createElement('div');
+      stats.className = 'library-card-stats';
+      stats.append(
+        createLibraryStatBox('Çalışma', studyTotal > 0 ? formatTotalShort(studyTotal) : '0 dk', 'is-study'),
+        createLibraryStatBox('Kayıt', `${studyCount} oturum`),
+        createLibraryStatBox('Mola', breakCount ? `${breakCount} · ${formatTotalShort(breakTotal)}` : 'Yok', 'is-break'),
+        createLibraryStatBox('Hedef', goals.length ? `${goalsDone}/${goals.length}` : '—', 'is-goals')
+      );
 
-      const pages = document.createElement('div');
-      pages.className = 'library-book-pages';
-      pages.hidden = !isOpen;
+      const body = document.createElement('div');
+      body.className = 'library-card-body';
+      body.append(
+        createLibrarySection(
+          'Çalışma Kayıtları',
+          'Bu gün için çalışma kaydı yok.',
+          [...sessions].reverse(),
+          createLibrarySessionTile
+        ),
+        createLibrarySection(
+          'Günün Hedefleri',
+          'Bu gün için hedef kaydı yok.',
+          goals,
+          createLibraryGoalTile
+        )
+      );
 
-      if (sessions.length) {
-        const sessionsTitle = document.createElement('h3');
-        sessionsTitle.className = 'library-section-title';
-        sessionsTitle.textContent = 'Çalışma Kayıtları';
-
-        const list = document.createElement('ul');
-        list.className = 'library-session-list';
-
-        [...sessions].reverse().forEach(session => {
-          const meta = formatSessionMeta(session);
-          const li = document.createElement('li');
-          li.className = 'library-session-item' + (isBreakSession(session) ? ' session-break' : '');
-
-          const timeEl = document.createElement('span');
-          timeEl.className = 'session-time';
-          timeEl.textContent = `${session.startTime} - ${session.endTime}`;
-
-          li.append(timeEl, buildSessionMetaElements(session, meta));
-          list.appendChild(li);
-        });
-
-        pages.append(sessionsTitle, list);
-      }
-
-      if (goals.length) {
-        const goalsTitle = document.createElement('h3');
-        goalsTitle.className = 'library-section-title';
-        goalsTitle.textContent = 'Günün Hedefleri';
-
-        const goalsList = document.createElement('ul');
-        goalsList.className = 'library-goals-list';
-
-        goals.forEach(goal => {
-          const li = document.createElement('li');
-          li.className = 'library-goal-item' + (goal.done ? ' is-done' : '');
-
-          const mark = document.createElement('span');
-          mark.className = 'library-goal-mark';
-          mark.textContent = goal.done ? '✓' : '○';
-
-          const text = document.createElement('span');
-          text.textContent = goal.text;
-
-          li.append(mark, text);
-          goalsList.appendChild(li);
-        });
-
-        pages.append(goalsTitle, goalsList);
-      }
-
-      if (!sessions.length && !goals.length) {
-        const emptyDay = document.createElement('p');
-        emptyDay.className = 'library-empty';
-        emptyDay.textContent = 'Bu gün için kayıt bulunamadı.';
-        pages.appendChild(emptyDay);
-      }
-
-      book.append(spine, pages);
-      els.libraryShelf.appendChild(book);
+      card.append(header, stats, body);
+      els.libraryShelf.appendChild(card);
     });
   }
 
@@ -1052,7 +1094,6 @@
     if (state.date !== today) {
       archiveDay(state.date, state.sessions);
       state = createFreshState();
-      openLibraryDay = null;
       saveState();
       renderAll();
       stopTicking();
