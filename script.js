@@ -3,7 +3,16 @@
 
   const STORAGE_KEY = 'studyTrackerData';
   const SETTINGS_KEY = 'calismaTakipcisi_settings';
-  const MAX_COUNTDOWN_MINUTES = 720;
+
+  const WEEKDAY_CHART = [
+    { id: 'mon', short: 'Pzt', label: 'Pazartesi' },
+    { id: 'tue', short: 'Sal', label: 'Salı' },
+    { id: 'wed', short: 'Çar', label: 'Çarşamba' },
+    { id: 'thu', short: 'Per', label: 'Perşembe' },
+    { id: 'fri', short: 'Cum', label: 'Cuma' },
+    { id: 'sat', short: 'Cmt', label: 'Cumartesi' },
+    { id: 'sun', short: 'Paz', label: 'Pazar' }
+  ];
 
   const storage = {
     get(key) {
@@ -42,7 +51,8 @@
     modeChrono: document.getElementById('modeChrono'),
     modeCountdown: document.getElementById('modeCountdown'),
     countdownSetup: document.getElementById('countdownSetup'),
-    countdownDuration: document.getElementById('countdownDuration'),
+    countdownHours: document.getElementById('countdownHours'),
+    countdownMinutes: document.getElementById('countdownMinutes'),
     tagInput: document.getElementById('tagInput'),
     breakDuration: document.getElementById('breakDuration'),
     btnBreakStart: document.getElementById('btnBreakStart'),
@@ -78,14 +88,18 @@
 
   let saveInProgress = false;
 
-  function getCountdownDurationMinutes() {
-    const value = Number(els.countdownDuration.value);
-    if (!Number.isFinite(value)) return 25;
-    return Math.min(MAX_COUNTDOWN_MINUTES, Math.max(1, Math.round(value)));
+  function clampCountdownInputs() {
+    const hours = Math.min(23, Math.max(0, Math.round(Number(els.countdownHours.value) || 0)));
+    let minutes = Math.min(59, Math.max(0, Math.round(Number(els.countdownMinutes.value) || 0)));
+    if (hours === 0 && minutes === 0) minutes = 1;
+    els.countdownHours.value = String(hours);
+    els.countdownMinutes.value = String(minutes);
+    return { hours, minutes };
   }
 
   function getCountdownTotalMs() {
-    return getCountdownDurationMinutes() * 60 * 1000;
+    const { hours, minutes } = clampCountdownInputs();
+    return (hours * 60 + minutes) * 60 * 1000;
   }
 
   function createFreshCountdown() {
@@ -172,11 +186,17 @@
       const raw = storage.get(SETTINGS_KEY);
       if (!raw) return;
       const parsed = JSON.parse(raw);
-      if (Number.isFinite(parsed.countdownMinutes)) {
-        els.countdownDuration.value = String(
-          Math.min(MAX_COUNTDOWN_MINUTES, Math.max(1, Math.round(parsed.countdownMinutes)))
-        );
+      if (Number.isFinite(parsed.countdownHours)) {
+        els.countdownHours.value = String(Math.min(23, Math.max(0, Math.round(parsed.countdownHours))));
       }
+      if (Number.isFinite(parsed.countdownHours) && Number.isFinite(parsed.countdownMinutes)) {
+        els.countdownMinutes.value = String(Math.min(59, Math.max(0, Math.round(parsed.countdownMinutes))));
+      } else if (Number.isFinite(parsed.countdownMinutes)) {
+        const total = Math.max(1, Math.round(parsed.countdownMinutes));
+        els.countdownHours.value = String(Math.min(23, Math.floor(total / 60)));
+        els.countdownMinutes.value = String(Math.min(59, total % 60));
+      }
+      clampCountdownInputs();
       if (parsed.timerMode === 'countdown' || parsed.timerMode === 'pomodoro') {
         state.timerMode = 'countdown';
       } else if (parsed.timerMode === 'chrono') {
@@ -188,9 +208,11 @@
   }
 
   function saveSettings() {
+    const { hours, minutes } = clampCountdownInputs();
     storage.set(SETTINGS_KEY, JSON.stringify({
       timerMode: state.timerMode,
-      countdownMinutes: getCountdownDurationMinutes()
+      countdownHours: hours,
+      countdownMinutes: minutes
     }));
   }
 
@@ -199,12 +221,22 @@
   }
 
   function applyCountdownDurationInput() {
+    clampCountdownInputs();
     if (isCountdownMode() && !state.countdown.runningSince) {
       state.countdown = createFreshCountdown();
+      saveState();
       renderTimer();
       updateButtons();
     }
     saveSettings();
+  }
+
+  function repairCountdownState() {
+    if (!isCountdownMode()) return;
+    if (state.countdown.runningSince) return;
+    if (state.countdown.remainingMs <= 0 || state.countdown.remainingMs > state.countdown.totalMs) {
+      state.countdown = createFreshCountdown();
+    }
   }
 
   function playTimerDoneTone() {
@@ -636,7 +668,10 @@
       base.runningSince = source.runningSince || null;
       base.startTime = source.startTime || source.workStartTime || null;
       if (base.totalMs >= 60000) {
-        els.countdownDuration.value = String(Math.round(base.totalMs / 60000));
+        const totalMin = Math.round(base.totalMs / 60000);
+        els.countdownHours.value = String(Math.min(23, Math.floor(totalMin / 60)));
+        els.countdownMinutes.value = String(Math.min(59, totalMin % 60));
+        clampCountdownInputs();
       }
       return base;
     }
@@ -648,7 +683,10 @@
       base.totalMs = Math.max(base.totalMs, base.remainingMs);
       base.runningSince = legacyPomodoro.runningSince || null;
       base.startTime = legacyPomodoro.workStartTime || null;
-      els.countdownDuration.value = String(Math.max(1, Math.round(base.totalMs / 60000)));
+      const totalMin = Math.max(1, Math.round(base.totalMs / 60000));
+      els.countdownHours.value = String(Math.min(23, Math.floor(totalMin / 60)));
+      els.countdownMinutes.value = String(Math.min(59, totalMin % 60));
+      clampCountdownInputs();
     }
 
     return base;
@@ -779,6 +817,58 @@
       .reduce((sum, s) => sum + s.durationMinutes, 0);
   }
 
+  function getDateKeyFromDate(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  function getWeekStartMonday(baseDate = new Date()) {
+    const d = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate());
+    const dow = d.getDay();
+    const offset = dow === 0 ? -6 : 1 - dow;
+    d.setDate(d.getDate() + offset);
+    return d;
+  }
+
+  function getStudyMinutesForDateKey(dateKey) {
+    const today = getTodayKey();
+    if (dateKey === today) return getTotalMinutes();
+
+    const day = historyArchive[dateKey];
+    if (!day || !Array.isArray(day.sessions)) return 0;
+    return getStudyTotalForSessions(day.sessions);
+  }
+
+  function getWeeklyChartData() {
+    const todayKey = getTodayKey();
+    const weekStart = getWeekStartMonday(new Date());
+
+    return WEEKDAY_CHART.map((weekday, index) => {
+      const date = new Date(weekStart);
+      date.setDate(weekStart.getDate() + index);
+      const dateKey = getDateKeyFromDate(date);
+      const minutes = getStudyMinutesForDateKey(dateKey);
+
+      return {
+        ...weekday,
+        dateKey,
+        minutes,
+        isToday: dateKey === todayKey
+      };
+    });
+  }
+
+  function formatWeeklyMinutesLabel(minutes) {
+    const rounded = Math.max(0, Math.round(minutes));
+    const hours = Math.floor(rounded / 60);
+    const mins = rounded % 60;
+    if (hours === 0) return `${mins} dk`;
+    if (mins === 0) return `${hours} sa`;
+    return `${hours} sa ${mins} dk`;
+  }
+
   function renderTimer() {
     syncTimerModeUi();
 
@@ -865,11 +955,36 @@
   function undoDelete() {
     if (!undoBuffer) return;
 
-    state.sessions.splice(undoBuffer.index, 0, undoBuffer.session);
+    if (undoBuffer.type === 'archiveDay') {
+      historyArchive[undoBuffer.dateKey] = undoBuffer.day;
+    } else {
+      state.sessions.splice(undoBuffer.index, 0, undoBuffer.session);
+    }
+
     undoBuffer = null;
     hideToast();
     saveState();
     renderAll();
+  }
+
+  function deleteArchiveDay(dateKey) {
+    const day = historyArchive[dateKey];
+    if (!day) return;
+
+    undoBuffer = {
+      type: 'archiveDay',
+      dateKey,
+      day: {
+        sessions: Array.isArray(day.sessions) ? day.sessions.map(session => ({ ...session })) : [],
+        goals: Array.isArray(day.goals) ? day.goals.map(goal => ({ ...goal })) : []
+      }
+    };
+
+    delete historyArchive[dateKey];
+    saveState();
+    renderChart();
+    renderLibrary();
+    showUndoToast('Gün arşivden silindi');
   }
 
   function buildSessionMetaElements(session, meta) {
@@ -992,7 +1107,18 @@
       badge.className = 'library-card-badge';
       badge.textContent = studyTotal > 0 ? formatTotalShort(studyTotal) : '—';
 
-      header.append(dateWrap, badge);
+      const deleteDayBtn = document.createElement('button');
+      deleteDayBtn.className = 'library-card-delete';
+      deleteDayBtn.type = 'button';
+      deleteDayBtn.textContent = 'Sil';
+      deleteDayBtn.setAttribute('aria-label', `${formatDateKeyLabel(dateKey)} gününü arşivden sil`);
+      deleteDayBtn.addEventListener('click', () => deleteArchiveDay(dateKey));
+
+      const headerActions = document.createElement('div');
+      headerActions.className = 'library-card-actions';
+      headerActions.append(badge, deleteDayBtn);
+
+      header.append(dateWrap, headerActions);
 
       const stats = document.createElement('div');
       stats.className = 'library-card-stats';
@@ -1025,55 +1151,62 @@
     });
   }
 
-  function renderChartLegend(totals) {
+  function renderChartLegend(weekData) {
     els.chartLegend.innerHTML = '';
-    PERIODS.forEach(period => {
-      const mins = Math.max(0, Math.round(totals[period.id]));
+    weekData.forEach(day => {
       const li = document.createElement('li');
+      li.className = day.isToday ? 'is-today' : '';
       li.innerHTML =
-        `<span class="dot" style="background:${period.color}"></span>` +
-        `<span>${period.label}</span>` +
-        `<span class="legend-value">${mins} dk</span>`;
+        `<span class="dot" style="background:${day.isToday ? '#00d4ff' : '#a855f7'}"></span>` +
+        `<span>${day.label}</span>` +
+        `<span class="legend-value">${formatWeeklyMinutesLabel(day.minutes)}</span>`;
       els.chartLegend.appendChild(li);
     });
   }
 
   function renderChart() {
-    const totals = getPeriodTotals();
-    const values = PERIODS.map(p => Math.round(totals[p.id] * 10) / 10);
-    const hasData = values.some(v => v > 0);
+    const weekData = getWeeklyChartData();
+    const values = weekData.map(day => Math.round(day.minutes * 10) / 10);
+    const hasData = values.some(value => value > 0);
+    const labels = weekData.map(day => day.short);
 
     if (typeof Chart === 'undefined') {
-      renderChartLegend(totals);
+      renderChartLegend(weekData);
       return;
     }
 
+    if (chart && chart.config.type !== 'bar') {
+      chart.destroy();
+      chart = null;
+    }
+
+    const barColors = weekData.map(day => (day.isToday ? '#00d4ff' : 'rgba(168, 85, 247, 0.75)'));
+    const borderColors = weekData.map(day => (day.isToday ? '#00d4ff' : '#a855f7'));
+
     if (chart) {
-      chart.data.datasets[0].data = hasData ? values : [1, 1, 1, 1];
-      chart.data.datasets[0].backgroundColor = hasData
-        ? PERIODS.map(p => p.color)
-        : PERIODS.map(p => p.color + '33');
+      chart.data.labels = labels;
+      chart.data.datasets[0].data = values;
+      chart.data.datasets[0].backgroundColor = barColors;
+      chart.data.datasets[0].borderColor = borderColors;
+      chart.options.scales.y.max = hasData ? undefined : 60;
       chart.update('none');
     } else {
       chart = new Chart(els.chartCanvas, {
-        type: 'doughnut',
+        type: 'bar',
         data: {
-          labels: PERIODS.map(p => p.label),
+          labels,
           datasets: [{
-            data: hasData ? values : [1, 1, 1, 1],
-            backgroundColor: hasData
-              ? PERIODS.map(p => p.color)
-              : PERIODS.map(p => p.color + '33'),
-            borderColor: '#111118',
-            borderWidth: 3,
-            hoverBorderColor: '#0a0a0f',
-            hoverOffset: 6
+            data: values,
+            backgroundColor: barColors,
+            borderColor: borderColors,
+            borderWidth: 1,
+            borderRadius: 4,
+            maxBarThickness: 42
           }]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          cutout: '68%',
           plugins: {
             legend: { display: false },
             tooltip: {
@@ -1086,25 +1219,49 @@
               bodyColor: '#7a7a8c',
               padding: 12,
               callbacks: {
+                title(items) {
+                  const index = items[0]?.dataIndex;
+                  return weekData[index]?.label || '';
+                },
                 label(ctx) {
-                  if (!hasData) return 'Henüz veri yok';
-                  const mins = ctx.parsed;
-                  const total = values.reduce((a, b) => a + b, 0);
-                  const pct = total > 0 ? Math.round((mins / total) * 100) : 0;
-                  return `${Math.round(mins)} dakika (${pct}%)`;
+                  const mins = ctx.parsed.y || 0;
+                  if (mins <= 0) return 'Kayıt yok';
+                  return formatWeeklyMinutesLabel(mins);
                 }
               }
             }
           },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: {
+                color: '#7a7a8c',
+                font: { family: "'Fira Code', monospace", size: 10 }
+              }
+            },
+            y: {
+              beginAtZero: true,
+              suggestedMax: hasData ? undefined : 60,
+              ticks: {
+                color: '#7a7a8c',
+                font: { family: "'Fira Code', monospace", size: 10 },
+                callback(value) {
+                  return `${value} dk`;
+                }
+              },
+              grid: {
+                color: 'rgba(0, 212, 255, 0.08)'
+              }
+            }
+          },
           animation: {
-            animateRotate: true,
-            duration: 600
+            duration: 500
           }
         }
       });
     }
 
-    renderChartLegend(totals);
+    renderChartLegend(weekData);
   }
 
   function updateButtons() {
@@ -1127,7 +1284,8 @@
     els.tagInput.disabled = breakRunning || anyTimerRunning;
     els.modeChrono.disabled = breakRunning || anyTimerRunning;
     els.modeCountdown.disabled = breakRunning || anyTimerRunning;
-    els.countdownDuration.disabled = breakRunning || anyTimerRunning;
+    els.countdownHours.disabled = breakRunning || anyTimerRunning;
+    els.countdownMinutes.disabled = breakRunning || anyTimerRunning;
 
     els.btnBreakStart.disabled = breakRunning || anyTimerRunning;
     els.btnBreakCancel.disabled = !breakRunning;
@@ -1178,7 +1336,16 @@
     if (state.countdown.runningSince || isBreakRunning()) return;
 
     const now = new Date();
-    if (!state.countdown.startTime) {
+    const totalMs = getCountdownTotalMs();
+
+    if (!state.countdown.runningSince && state.countdown.remainingMs <= 0) {
+      state.countdown = createFreshCountdown();
+    } else if (!state.countdown.runningSince && state.countdown.remainingMs > totalMs) {
+      state.countdown.remainingMs = totalMs;
+      state.countdown.totalMs = totalMs;
+    }
+
+    if (!state.countdown.startTime && getCountdownElapsedMs() <= 0) {
       state.countdown.startTime = formatClock(now);
     }
 
@@ -1187,6 +1354,7 @@
       state.countdown.startTime = formatClock(now);
     }
 
+    state.countdown.totalMs = totalMs;
     state.countdown.runningSince = Date.now();
     saveState();
     renderTimer();
@@ -1446,8 +1614,8 @@
   els.btnSave.addEventListener('click', handleSave);
   els.modeChrono.addEventListener('click', () => setTimerMode('chrono'));
   els.modeCountdown.addEventListener('click', () => setTimerMode('countdown'));
-  els.countdownDuration.addEventListener('change', applyCountdownDurationInput);
-  els.countdownDuration.addEventListener('input', applyCountdownDurationInput);
+  els.countdownHours.addEventListener('change', applyCountdownDurationInput);
+  els.countdownMinutes.addEventListener('change', applyCountdownDurationInput);
   els.btnBreakStart.addEventListener('click', handleBreakStart);
   els.btnBreakCancel.addEventListener('click', handleBreakCancel);
   els.toastUndo.addEventListener('click', undoDelete);
@@ -1489,6 +1657,7 @@
 
   loadSettings();
   loadState();
+  repairCountdownState();
   syncTimerModeUi();
   renderAll();
 

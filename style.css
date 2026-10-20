@@ -996,6 +996,10 @@ body::before {
   animation: chartFadeIn 0.6s ease;
 }
 
+.chart-container-week {
+  height: 260px;
+}
+
 @keyframes chartFadeIn {
   from { opacity: 0; transform: scale(0.95); }
   to { opacity: 1; transform: scale(1); }
@@ -1007,6 +1011,10 @@ body::before {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
+}
+
+.chart-legend li.is-today {
+  color: var(--text-primary);
 }
 
 .chart-legend li {
@@ -1352,6 +1360,13 @@ body::before {
   text-transform: capitalize;
 }
 
+.library-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-shrink: 0;
+}
+
 .library-card-badge {
   flex-shrink: 0;
   padding: 0.35rem 0.65rem;
@@ -1362,6 +1377,27 @@ body::before {
   font-weight: 600;
   color: var(--neon-purple);
   text-shadow: 0 0 12px var(--glow-purple);
+}
+
+.library-card-delete {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: var(--radius);
+  padding: 0.35rem 0.55rem;
+  min-height: 32px;
+  cursor: pointer;
+  transition: color var(--transition), border-color var(--transition), background var(--transition);
+}
+
+.library-card-delete:hover {
+  color: var(--neon-red);
+  border-color: rgba(239, 68, 68, 0.45);
+  background: rgba(239, 68, 68, 0.06);
 }
 
 .library-card-stats {

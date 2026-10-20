@@ -67,13 +67,24 @@
           <div class="countdown-duration-wrap">
             <input
               class="countdown-duration"
-              id="countdownDuration"
+              id="countdownHours"
               type="number"
-              min="1"
-              max="720"
+              min="0"
+              max="23"
+              value="0"
+              inputmode="numeric"
+              aria-label="Saat"
+            >
+            <span class="countdown-unit">sa</span>
+            <input
+              class="countdown-duration"
+              id="countdownMinutes"
+              type="number"
+              min="0"
+              max="59"
               value="25"
               inputmode="numeric"
-              aria-label="Geri sayım süresi (dakika)"
+              aria-label="Dakika"
             >
             <span class="countdown-unit">dk</span>
           </div>
@@ -123,9 +134,9 @@
       </section>
 
       <aside class="panel panel-right">
-        <h2 class="panel-title">Gün Dağılımı</h2>
-        <div class="chart-container">
-          <canvas id="periodChart" aria-label="Günlük çalışma dağılım grafiği"></canvas>
+        <h2 class="panel-title">Bu Hafta</h2>
+        <div class="chart-container chart-container-week">
+          <canvas id="periodChart" aria-label="Haftalık çalışma grafiği"></canvas>
         </div>
         <ul class="chart-legend" id="chartLegend"></ul>
       </aside>
