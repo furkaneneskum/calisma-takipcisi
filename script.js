@@ -1883,3 +1883,250 @@
   loadPrefs();
 })();
 
+(function initDailyGoals() {
+  'use strict';
+
+  const LEGACY_DEFAULT_GOAL_TEXTS = [
+    '2 Saat Toplam Çalışma Yap',
+    'En Az 1 Mola Periyodu Kullan',
+    'Günlük Çalışma Kaydını Tamamla'
+  ];
+
+  const goalStorage = {
+    get(key) {
+      try {
+        return localStorage.getItem(key);
+      } catch {
+        return null;
+      }
+    },
+    set(key, value) {
+      try {
+        localStorage.setItem(key, value);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+  };
+
+  const els = {
+    list: document.getElementById('goalsList'),
+    progressFill: document.getElementById('goalsProgressFill'),
+    progressText: document.getElementById('goalsProgressText'),
+    input: document.getElementById('goalInput'),
+    addBtn: document.getElementById('goalAddBtn')
+  };
+
+  if (!els.list) return;
+
+  let goals = [];
+  let loadedDateKey = '';
+
+  function getTodayKey() {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  function getGoalsStorageKey(dateKey) {
+    return `studyTracker_goals_${dateKey || getTodayKey()}`;
+  }
+
+  function createGoalId() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  }
+
+  function isLegacyDefaultGoalSet(parsed) {
+    if (!Array.isArray(parsed) || parsed.length !== LEGACY_DEFAULT_GOAL_TEXTS.length) {
+      return false;
+    }
+
+    const texts = parsed
+      .map(goal => String(goal.text || '').trim())
+      .sort();
+
+    const defaults = [...LEGACY_DEFAULT_GOAL_TEXTS].sort();
+    return texts.every((text, index) => text === defaults[index]);
+  }
+
+  function loadGoals() {
+    const dateKey = getTodayKey();
+    loadedDateKey = dateKey;
+    const raw = goalStorage.get(getGoalsStorageKey(dateKey));
+
+    if (!raw) {
+      goals = [];
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        goals = [];
+        saveGoals();
+        return;
+      }
+
+      if (isLegacyDefaultGoalSet(parsed)) {
+        goals = [];
+        saveGoals();
+        return;
+      }
+
+      goals = parsed.map(goal => ({
+        id: goal.id || createGoalId(),
+        text: String(goal.text || '').trim(),
+        done: Boolean(goal.done)
+      })).filter(goal => goal.text);
+    } catch {
+      goals = [];
+      saveGoals();
+    }
+  }
+
+  function saveGoals() {
+    goalStorage.set(getGoalsStorageKey(loadedDateKey || getTodayKey()), JSON.stringify(goals));
+  }
+
+  function renderProgress() {
+    const total = goals.length;
+    const done = goals.filter(goal => goal.done).length;
+    const percent = total > 0 ? Math.round((done / total) * 100) : 0;
+
+    els.progressFill.style.width = `${percent}%`;
+    els.progressText.textContent = `${done}/${total} Tamamlandı — %${percent}`;
+  }
+
+  function renderGoals() {
+    els.list.innerHTML = '';
+
+    if (goals.length === 0) {
+      const empty = document.createElement('li');
+      empty.className = 'goals-empty';
+      empty.textContent = 'Henüz hedef yok';
+      els.list.appendChild(empty);
+      renderProgress();
+      return;
+    }
+
+    goals.forEach(goal => {
+      const li = document.createElement('li');
+      li.className = 'goal-item' + (goal.done ? ' is-done' : '');
+      li.dataset.id = goal.id;
+
+      const checkBtn = document.createElement('button');
+      checkBtn.className = 'goal-check';
+      checkBtn.type = 'button';
+      checkBtn.setAttribute('aria-label', goal.done ? 'Tamamlandı işaretini kaldır' : 'Tamamlandı olarak işaretle');
+      checkBtn.setAttribute('aria-pressed', goal.done ? 'true' : 'false');
+
+      const mark = document.createElement('span');
+      mark.className = 'goal-check-mark';
+      mark.textContent = '✓';
+      checkBtn.appendChild(mark);
+
+      const text = document.createElement('span');
+      text.className = 'goal-text';
+      text.textContent = goal.text;
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'goal-delete';
+      deleteBtn.type = 'button';
+      deleteBtn.setAttribute('aria-label', 'Hedefi sil');
+      deleteBtn.textContent = '×';
+
+      checkBtn.addEventListener('click', () => toggleGoal(goal.id, li));
+      deleteBtn.addEventListener('click', () => deleteGoal(goal.id, li));
+
+      li.append(checkBtn, text, deleteBtn);
+      els.list.appendChild(li);
+    });
+
+    renderProgress();
+  }
+
+  function toggleGoal(id, listItem) {
+    const goal = goals.find(item => item.id === id);
+    if (!goal) return;
+
+    goal.done = !goal.done;
+    saveGoals();
+    renderGoals();
+
+    if (goal.done && listItem) {
+      const updatedItem = els.list.querySelector(`[data-id="${id}"]`);
+      if (updatedItem) {
+        updatedItem.classList.add('just-completed');
+        setTimeout(() => updatedItem.classList.remove('just-completed'), 650);
+      }
+    }
+  }
+
+  function deleteGoal(id, listItem) {
+    if (listItem) {
+      listItem.style.opacity = '0';
+      listItem.style.transform = 'translateX(-8px)';
+      setTimeout(() => finishDeleteGoal(id), 180);
+    } else {
+      finishDeleteGoal(id);
+    }
+  }
+
+  function finishDeleteGoal(id) {
+    goals = goals.filter(goal => goal.id !== id);
+    saveGoals();
+    renderGoals();
+  }
+
+  function addGoal() {
+    const text = els.input.value.trim();
+    if (!text) return;
+
+    goals.push({
+      id: createGoalId(),
+      text,
+      done: false
+    });
+
+    els.input.value = '';
+    saveGoals();
+    renderGoals();
+  }
+
+  function refreshForToday() {
+    const today = getTodayKey();
+    if (today !== loadedDateKey) {
+      const previousDateKey = loadedDateKey;
+      saveGoals();
+
+      if (previousDateKey && window.studyTrackerArchivePastDay) {
+        window.studyTrackerArchivePastDay(previousDateKey, null);
+      }
+
+      loadGoals();
+      renderGoals();
+    }
+  }
+
+  els.addBtn.addEventListener('click', addGoal);
+  els.input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      addGoal();
+    }
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      refreshForToday();
+    }
+  });
+
+  setInterval(refreshForToday, 60000);
+
+  loadGoals();
+  renderGoals();
+})();

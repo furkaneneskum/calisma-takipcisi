@@ -363,6 +363,13 @@ body::before {
   border-radius: 2px;
 }
 
+.goals-empty {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  padding: 0.5rem 0.15rem;
+}
+
 .goal-item {
   display: flex;
   align-items: center;
@@ -681,22 +688,25 @@ body::before {
   position: relative;
   z-index: 1;
   isolation: isolate;
+  overflow: hidden;
   margin-bottom: 2.5rem;
+  padding: 0.75rem 1.5rem;
+  max-width: 100%;
 }
 
 .timer-glow {
   position: absolute;
-  inset: -20px -40px;
+  inset: 0;
   z-index: 0;
-  background: radial-gradient(circle, var(--glow-cyan) 0%, transparent 70%);
-  opacity: 0.35;
+  background: radial-gradient(ellipse 80% 70% at 50% 50%, var(--glow-cyan) 0%, transparent 72%);
+  opacity: 0.32;
   pointer-events: none;
   animation: pulse 4s ease-in-out infinite;
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 0.3; transform: scale(1); }
-  50% { opacity: 0.5; transform: scale(1.02); }
+  0%, 100% { opacity: 0.28; }
+  50% { opacity: 0.38; }
 }
 
 .timer {
