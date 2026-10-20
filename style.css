@@ -579,7 +579,12 @@ body::before {
 }
 
 .panel-center .timer-mode,
-.panel-center .countdown-setup,
+.panel-center .countdown-setup {
+  position: relative;
+  z-index: 5;
+  background: var(--bg-deep);
+}
+
 .panel-center .controls,
 .panel-center .break-controls {
   position: relative;
@@ -652,10 +657,14 @@ body::before {
   margin-bottom: 1.25rem;
   border: 1px solid var(--border);
   border-radius: 999px;
-  background: rgba(17, 17, 24, 0.65);
+  background: var(--bg-deep);
+  isolation: isolate;
+  box-shadow: 0 10px 18px 10px var(--bg-deep);
 }
 
 .timer-mode-btn {
+  position: relative;
+  z-index: 1;
   font-family: var(--font-mono);
   font-size: 0.72rem;
   letter-spacing: 0.04em;
@@ -671,7 +680,8 @@ body::before {
 
 .timer-mode-btn.is-active {
   color: var(--text-primary);
-  background: rgba(168, 85, 247, 0.14);
+  background: rgba(168, 85, 247, 0.22);
+  box-shadow: none;
 }
 
 .timer-mode-btn:disabled {
@@ -690,23 +700,10 @@ body::before {
   isolation: isolate;
   overflow: hidden;
   margin-bottom: 2.5rem;
-  padding: 0.75rem 1.5rem;
+  margin-top: 0.35rem;
+  padding: 0.85rem 1.5rem 1rem;
   max-width: 100%;
-}
-
-.timer-glow {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  background: radial-gradient(ellipse 80% 70% at 50% 50%, var(--glow-cyan) 0%, transparent 72%);
-  opacity: 0.32;
-  pointer-events: none;
-  animation: pulse 4s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 0.28; }
-  50% { opacity: 0.38; }
+  background: radial-gradient(ellipse 85% 75% at 50% 58%, rgba(0, 212, 255, 0.07) 0%, transparent 72%);
 }
 
 .timer {
@@ -717,15 +714,14 @@ body::before {
   font-weight: 600;
   letter-spacing: 0.08em;
   color: var(--text-primary);
-  text-shadow:
-    0 0 30px var(--glow-cyan),
-    0 0 60px rgba(0, 212, 255, 0.1);
+  text-shadow: none;
   font-variant-numeric: tabular-nums;
   user-select: none;
 }
 
 .timer.running {
   color: var(--neon-cyan);
+  text-shadow: 0 0 16px rgba(0, 212, 255, 0.22);
 }
 
 .timer.break-mode {
@@ -735,8 +731,8 @@ body::before {
     0 0 60px rgba(245, 158, 11, 0.12);
 }
 
-.timer-wrapper.break-active .timer-glow {
-  background: radial-gradient(circle, rgba(245, 158, 11, 0.25) 0%, transparent 70%);
+.timer-wrapper.break-active {
+  background: radial-gradient(ellipse 85% 75% at 50% 58%, rgba(245, 158, 11, 0.1) 0%, transparent 72%);
 }
 
 /* Break Controls */

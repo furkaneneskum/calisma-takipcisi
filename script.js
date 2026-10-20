@@ -1939,17 +1939,12 @@
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   }
 
-  function isLegacyDefaultGoalSet(parsed) {
-    if (!Array.isArray(parsed) || parsed.length !== LEGACY_DEFAULT_GOAL_TEXTS.length) {
-      return false;
-    }
+  const legacyGoalTextSet = new Set(LEGACY_DEFAULT_GOAL_TEXTS);
 
-    const texts = parsed
-      .map(goal => String(goal.text || '').trim())
-      .sort();
+  function withoutLegacyDefaultGoals(parsed) {
+    if (!Array.isArray(parsed)) return [];
 
-    const defaults = [...LEGACY_DEFAULT_GOAL_TEXTS].sort();
-    return texts.every((text, index) => text === defaults[index]);
+    return parsed.filter(goal => !legacyGoalTextSet.has(String(goal.text || '').trim()));
   }
 
   function loadGoals() {
@@ -1964,19 +1959,13 @@
 
     try {
       const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) {
-        goals = [];
-        saveGoals();
-        return;
+      const stripped = withoutLegacyDefaultGoals(parsed);
+
+      if (stripped.length !== (Array.isArray(parsed) ? parsed.length : 0)) {
+        goalStorage.set(getGoalsStorageKey(dateKey), JSON.stringify(stripped));
       }
 
-      if (isLegacyDefaultGoalSet(parsed)) {
-        goals = [];
-        saveGoals();
-        return;
-      }
-
-      goals = parsed.map(goal => ({
+      goals = stripped.map(goal => ({
         id: goal.id || createGoalId(),
         text: String(goal.text || '').trim(),
         done: Boolean(goal.done)
@@ -2127,6 +2116,32 @@
 
   setInterval(refreshForToday, 60000);
 
+  function purgeLegacyGoalsInStorage() {
+    const keys = [];
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('studyTracker_goals_')) keys.push(key);
+      }
+    } catch {
+      return;
+    }
+
+    keys.forEach(key => {
+      try {
+        const raw = goalStorage.get(key);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        const stripped = withoutLegacyDefaultGoals(parsed);
+        if (!Array.isArray(parsed) || stripped.length === parsed.length) return;
+        goalStorage.set(key, JSON.stringify(stripped));
+      } catch {
+        /* ignore */
+      }
+    });
+  }
+
+  purgeLegacyGoalsInStorage();
   loadGoals();
   renderGoals();
 })();
