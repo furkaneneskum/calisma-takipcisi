@@ -1702,8 +1702,8 @@ body::before {
     max-height: 200px;
   }
 
-  .goals-list {
-    max-height: 160px;
+  .goals-week-scroll {
+    max-height: 280px;
   }
 }
 
