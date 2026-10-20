@@ -1923,8 +1923,9 @@
   const scrollEl = document.getElementById('goalsWeekScroll');
   if (!scrollEl) return;
 
-  let trackedTodayKey = getTodayKey();
-  let trackedWeekStartKey = getWeekStartKey(new Date());
+  const openDayKeys = new Set();
+  let trackedTodayKey = '';
+  let trackedWeekStartKey = '';
 
   function getTodayKey() {
     const now = new Date();
@@ -2053,30 +2054,79 @@
     return li;
   }
 
-  function renderWeekGoals() {
+  function ensureDefaultOpenDay() {
+    if (openDayKeys.size > 0) return;
+    openDayKeys.add(getTodayKey());
+  }
+
+  function formatDayGoalMeta(goals) {
+    if (!goals.length) return 'Hedef yok';
+    const done = goals.filter(goal => goal.done).length;
+    if (done === 0) return `${goals.length} hedef`;
+    return `${done}/${goals.length} tamam`;
+  }
+
+  function toggleDayPanel(dateKey) {
+    if (openDayKeys.has(dateKey)) {
+      openDayKeys.delete(dateKey);
+    } else {
+      openDayKeys.add(dateKey);
+    }
+    renderWeekGoals(true);
+  }
+
+  function renderWeekGoals(preserveScroll = false) {
+    ensureDefaultOpenDay();
     const days = getWeekPlanDays();
+    const scrollTop = scrollEl.scrollTop;
     scrollEl.innerHTML = '';
 
     days.forEach(day => {
+      const isOpen = openDayKeys.has(day.dateKey);
       const section = document.createElement('section');
-      section.className = 'goals-day' + (day.isToday ? ' is-today' : '');
+      section.className = 'goals-day' +
+        (day.isToday ? ' is-today' : '') +
+        (isOpen ? ' is-open' : '');
       section.dataset.dateKey = day.dateKey;
 
-      const head = document.createElement('header');
-      head.className = 'goals-day-head';
+      const toggle = document.createElement('button');
+      toggle.className = 'goals-day-toggle';
+      toggle.type = 'button';
+      toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      toggle.setAttribute('aria-controls', `goals-body-${day.dateKey}`);
 
-      const title = document.createElement('h3');
+      const titleWrap = document.createElement('span');
+      titleWrap.className = 'goals-day-toggle-main';
+
+      const title = document.createElement('span');
       title.className = 'goals-day-title';
       title.textContent = day.label;
 
-      head.appendChild(title);
+      titleWrap.appendChild(title);
 
       if (day.isToday) {
         const tag = document.createElement('span');
         tag.className = 'goals-day-tag';
         tag.textContent = 'Bugün';
-        head.appendChild(tag);
+        titleWrap.appendChild(tag);
       }
+
+      const meta = document.createElement('span');
+      meta.className = 'goals-day-meta';
+      meta.textContent = formatDayGoalMeta(day.goals);
+
+      const chevron = document.createElement('span');
+      chevron.className = 'goals-day-chevron';
+      chevron.setAttribute('aria-hidden', 'true');
+      chevron.textContent = '›';
+
+      toggle.append(titleWrap, meta, chevron);
+      toggle.addEventListener('click', () => toggleDayPanel(day.dateKey));
+
+      const body = document.createElement('div');
+      body.className = 'goals-day-body';
+      body.id = `goals-body-${day.dateKey}`;
+      body.hidden = !isOpen;
 
       const list = document.createElement('ul');
       list.className = 'goals-day-list';
@@ -2084,7 +2134,7 @@
       if (day.goals.length === 0) {
         const empty = document.createElement('li');
         empty.className = 'goals-empty';
-        empty.textContent = 'Hedef yok';
+        empty.textContent = 'Henüz hedef eklemedin';
         list.appendChild(empty);
       } else {
         day.goals.forEach(goal => list.appendChild(createGoalItem(day.dateKey, goal)));
@@ -2108,7 +2158,10 @@
       addBtn.textContent = '+';
       addBtn.setAttribute('aria-label', `${day.label} hedefi ekle`);
 
-      const submitGoal = () => addGoal(day.dateKey, input);
+      const submitGoal = () => {
+        openDayKeys.add(day.dateKey);
+        addGoal(day.dateKey, input);
+      };
       addBtn.addEventListener('click', submitGoal);
       input.addEventListener('keydown', (event) => {
         if (event.key === 'Enter') {
@@ -2118,13 +2171,18 @@
       });
 
       addRow.append(input, addBtn);
-      section.append(head, list, addRow);
+      body.append(list, addRow);
+      section.append(toggle, body);
       scrollEl.appendChild(section);
     });
 
-    const todaySection = scrollEl.querySelector('.goals-day.is-today');
-    if (todaySection) {
-      todaySection.scrollIntoView({ block: 'nearest' });
+    scrollEl.scrollTop = scrollTop;
+
+    if (!preserveScroll) {
+      const todaySection = scrollEl.querySelector('.goals-day.is-today');
+      if (todaySection) {
+        todaySection.scrollIntoView({ block: 'nearest' });
+      }
     }
   }
 
@@ -2134,8 +2192,9 @@
     if (!goal) return;
 
     goal.done = !goal.done;
+    openDayKeys.add(dateKey);
     saveGoalsForDate(dateKey, goals);
-    renderWeekGoals();
+    renderWeekGoals(true);
 
     if (goal.done && listItem) {
       const updatedItem = scrollEl.querySelector(`.goals-day[data-date-key="${dateKey}"] [data-id="${id}"]`);
@@ -2158,8 +2217,9 @@
 
   function finishDeleteGoal(dateKey, id) {
     const goals = loadGoalsForDate(dateKey).filter(goal => goal.id !== id);
+    openDayKeys.add(dateKey);
     saveGoalsForDate(dateKey, goals);
-    renderWeekGoals();
+    renderWeekGoals(true);
   }
 
   function addGoal(dateKey, inputEl) {
@@ -2173,9 +2233,10 @@
       done: false
     });
 
+    openDayKeys.add(dateKey);
     saveGoalsForDate(dateKey, goals);
     inputEl.value = '';
-    renderWeekGoals();
+    renderWeekGoals(true);
   }
 
   function refreshWeekPlanner() {
@@ -2230,5 +2291,7 @@
   setInterval(refreshWeekPlanner, 60000);
 
   purgeLegacyGoalsInStorage();
+  trackedTodayKey = getTodayKey();
+  trackedWeekStartKey = getWeekStartKey(new Date());
   renderWeekGoals();
 })();
