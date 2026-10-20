@@ -1883,13 +1883,23 @@
   loadPrefs();
 })();
 
-(function initDailyGoals() {
+(function initWeeklyGoals() {
   'use strict';
 
   const LEGACY_DEFAULT_GOAL_TEXTS = [
     '2 Saat Toplam Çalışma Yap',
     'En Az 1 Mola Periyodu Kullan',
     'Günlük Çalışma Kaydını Tamamla'
+  ];
+
+  const WEEKDAY_LABELS = [
+    'Pazartesi',
+    'Salı',
+    'Çarşamba',
+    'Perşembe',
+    'Cuma',
+    'Cumartesi',
+    'Pazar'
   ];
 
   const goalStorage = {
@@ -1910,29 +1920,38 @@
     }
   };
 
-  const els = {
-    list: document.getElementById('goalsList'),
-    progressFill: document.getElementById('goalsProgressFill'),
-    progressText: document.getElementById('goalsProgressText'),
-    input: document.getElementById('goalInput'),
-    addBtn: document.getElementById('goalAddBtn')
-  };
+  const scrollEl = document.getElementById('goalsWeekScroll');
+  if (!scrollEl) return;
 
-  if (!els.list) return;
-
-  let goals = [];
-  let loadedDateKey = '';
+  let trackedTodayKey = getTodayKey();
+  let trackedWeekStartKey = getWeekStartKey(new Date());
 
   function getTodayKey() {
     const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, '0');
-    const d = String(now.getDate()).padStart(2, '0');
+    return getDateKeyFromDate(now);
+  }
+
+  function getDateKeyFromDate(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
     return `${y}-${m}-${d}`;
   }
 
+  function getWeekStartMonday(baseDate = new Date()) {
+    const d = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate());
+    const dow = d.getDay();
+    const offset = dow === 0 ? -6 : 1 - dow;
+    d.setDate(d.getDate() + offset);
+    return d;
+  }
+
+  function getWeekStartKey(baseDate = new Date()) {
+    return getDateKeyFromDate(getWeekStartMonday(baseDate));
+  }
+
   function getGoalsStorageKey(dateKey) {
-    return `studyTracker_goals_${dateKey || getTodayKey()}`;
+    return `studyTracker_goals_${dateKey}`;
   }
 
   function createGoalId() {
@@ -1943,110 +1962,183 @@
 
   function withoutLegacyDefaultGoals(parsed) {
     if (!Array.isArray(parsed)) return [];
-
     return parsed.filter(goal => !legacyGoalTextSet.has(String(goal.text || '').trim()));
   }
 
-  function loadGoals() {
-    const dateKey = getTodayKey();
-    loadedDateKey = dateKey;
-    const raw = goalStorage.get(getGoalsStorageKey(dateKey));
+  function normalizeGoals(parsed) {
+    const stripped = withoutLegacyDefaultGoals(parsed);
+    return stripped.map(goal => ({
+      id: goal.id || createGoalId(),
+      text: String(goal.text || '').trim(),
+      done: Boolean(goal.done)
+    })).filter(goal => goal.text);
+  }
 
-    if (!raw) {
-      goals = [];
-      return;
-    }
+  function loadGoalsForDate(dateKey) {
+    const raw = goalStorage.get(getGoalsStorageKey(dateKey));
+    if (!raw) return [];
 
     try {
       const parsed = JSON.parse(raw);
       const stripped = withoutLegacyDefaultGoals(parsed);
-
-      if (stripped.length !== (Array.isArray(parsed) ? parsed.length : 0)) {
-        goalStorage.set(getGoalsStorageKey(dateKey), JSON.stringify(stripped));
-      }
-
-      goals = stripped.map(goal => ({
+      const normalized = stripped.map(goal => ({
         id: goal.id || createGoalId(),
         text: String(goal.text || '').trim(),
         done: Boolean(goal.done)
       })).filter(goal => goal.text);
+
+      if (!Array.isArray(parsed) || stripped.length !== parsed.length) {
+        saveGoalsForDate(dateKey, normalized);
+      }
+
+      return normalized;
     } catch {
-      goals = [];
-      saveGoals();
+      saveGoalsForDate(dateKey, []);
+      return [];
     }
   }
 
-  function saveGoals() {
-    goalStorage.set(getGoalsStorageKey(loadedDateKey || getTodayKey()), JSON.stringify(goals));
+  function saveGoalsForDate(dateKey, goals) {
+    goalStorage.set(getGoalsStorageKey(dateKey), JSON.stringify(goals));
   }
 
-  function renderProgress() {
-    const total = goals.length;
-    const done = goals.filter(goal => goal.done).length;
-    const percent = total > 0 ? Math.round((done / total) * 100) : 0;
+  function getWeekPlanDays() {
+    const weekStart = getWeekStartMonday(new Date());
+    const todayKey = getTodayKey();
 
-    els.progressFill.style.width = `${percent}%`;
-    els.progressText.textContent = `${done}/${total} Tamamlandı — %${percent}`;
+    return WEEKDAY_LABELS.map((label, index) => {
+      const date = new Date(weekStart);
+      date.setDate(weekStart.getDate() + index);
+      const dateKey = getDateKeyFromDate(date);
+
+      return {
+        label,
+        dateKey,
+        isToday: dateKey === todayKey,
+        goals: loadGoalsForDate(dateKey)
+      };
+    });
   }
 
-  function renderGoals() {
-    els.list.innerHTML = '';
+  function createGoalItem(dateKey, goal) {
+    const li = document.createElement('li');
+    li.className = 'goal-item' + (goal.done ? ' is-done' : '');
+    li.dataset.id = goal.id;
 
-    if (goals.length === 0) {
-      const empty = document.createElement('li');
-      empty.className = 'goals-empty';
-      empty.textContent = 'Henüz hedef yok';
-      els.list.appendChild(empty);
-      renderProgress();
-      return;
-    }
+    const checkBtn = document.createElement('button');
+    checkBtn.className = 'goal-check';
+    checkBtn.type = 'button';
+    checkBtn.setAttribute('aria-label', goal.done ? 'Tamamlandı işaretini kaldır' : 'Tamamlandı olarak işaretle');
+    checkBtn.setAttribute('aria-pressed', goal.done ? 'true' : 'false');
 
-    goals.forEach(goal => {
-      const li = document.createElement('li');
-      li.className = 'goal-item' + (goal.done ? ' is-done' : '');
-      li.dataset.id = goal.id;
+    const mark = document.createElement('span');
+    mark.className = 'goal-check-mark';
+    mark.textContent = '✓';
+    checkBtn.appendChild(mark);
 
-      const checkBtn = document.createElement('button');
-      checkBtn.className = 'goal-check';
-      checkBtn.type = 'button';
-      checkBtn.setAttribute('aria-label', goal.done ? 'Tamamlandı işaretini kaldır' : 'Tamamlandı olarak işaretle');
-      checkBtn.setAttribute('aria-pressed', goal.done ? 'true' : 'false');
+    const text = document.createElement('span');
+    text.className = 'goal-text';
+    text.textContent = goal.text;
 
-      const mark = document.createElement('span');
-      mark.className = 'goal-check-mark';
-      mark.textContent = '✓';
-      checkBtn.appendChild(mark);
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'goal-delete';
+    deleteBtn.type = 'button';
+    deleteBtn.setAttribute('aria-label', 'Hedefi sil');
+    deleteBtn.textContent = '×';
 
-      const text = document.createElement('span');
-      text.className = 'goal-text';
-      text.textContent = goal.text;
+    checkBtn.addEventListener('click', () => toggleGoal(dateKey, goal.id, li));
+    deleteBtn.addEventListener('click', () => deleteGoal(dateKey, goal.id, li));
 
-      const deleteBtn = document.createElement('button');
-      deleteBtn.className = 'goal-delete';
-      deleteBtn.type = 'button';
-      deleteBtn.setAttribute('aria-label', 'Hedefi sil');
-      deleteBtn.textContent = '×';
+    li.append(checkBtn, text, deleteBtn);
+    return li;
+  }
 
-      checkBtn.addEventListener('click', () => toggleGoal(goal.id, li));
-      deleteBtn.addEventListener('click', () => deleteGoal(goal.id, li));
+  function renderWeekGoals() {
+    const days = getWeekPlanDays();
+    scrollEl.innerHTML = '';
 
-      li.append(checkBtn, text, deleteBtn);
-      els.list.appendChild(li);
+    days.forEach(day => {
+      const section = document.createElement('section');
+      section.className = 'goals-day' + (day.isToday ? ' is-today' : '');
+      section.dataset.dateKey = day.dateKey;
+
+      const head = document.createElement('header');
+      head.className = 'goals-day-head';
+
+      const title = document.createElement('h3');
+      title.className = 'goals-day-title';
+      title.textContent = day.label;
+
+      head.appendChild(title);
+
+      if (day.isToday) {
+        const tag = document.createElement('span');
+        tag.className = 'goals-day-tag';
+        tag.textContent = 'Bugün';
+        head.appendChild(tag);
+      }
+
+      const list = document.createElement('ul');
+      list.className = 'goals-day-list';
+
+      if (day.goals.length === 0) {
+        const empty = document.createElement('li');
+        empty.className = 'goals-empty';
+        empty.textContent = 'Hedef yok';
+        list.appendChild(empty);
+      } else {
+        day.goals.forEach(goal => list.appendChild(createGoalItem(day.dateKey, goal)));
+      }
+
+      const addRow = document.createElement('div');
+      addRow.className = 'goals-day-add';
+
+      const input = document.createElement('input');
+      input.className = 'goals-day-input';
+      input.type = 'text';
+      input.placeholder = 'Hedef ekle';
+      input.maxLength = 80;
+      input.autocomplete = 'off';
+      input.spellcheck = false;
+      input.setAttribute('aria-label', `${day.label} için hedef ekle`);
+
+      const addBtn = document.createElement('button');
+      addBtn.className = 'goals-day-add-btn';
+      addBtn.type = 'button';
+      addBtn.textContent = '+';
+      addBtn.setAttribute('aria-label', `${day.label} hedefi ekle`);
+
+      const submitGoal = () => addGoal(day.dateKey, input);
+      addBtn.addEventListener('click', submitGoal);
+      input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          submitGoal();
+        }
+      });
+
+      addRow.append(input, addBtn);
+      section.append(head, list, addRow);
+      scrollEl.appendChild(section);
     });
 
-    renderProgress();
+    const todaySection = scrollEl.querySelector('.goals-day.is-today');
+    if (todaySection) {
+      todaySection.scrollIntoView({ block: 'nearest' });
+    }
   }
 
-  function toggleGoal(id, listItem) {
+  function toggleGoal(dateKey, id, listItem) {
+    const goals = loadGoalsForDate(dateKey);
     const goal = goals.find(item => item.id === id);
     if (!goal) return;
 
     goal.done = !goal.done;
-    saveGoals();
-    renderGoals();
+    saveGoalsForDate(dateKey, goals);
+    renderWeekGoals();
 
     if (goal.done && listItem) {
-      const updatedItem = els.list.querySelector(`[data-id="${id}"]`);
+      const updatedItem = scrollEl.querySelector(`.goals-day[data-date-key="${dateKey}"] [data-id="${id}"]`);
       if (updatedItem) {
         updatedItem.classList.add('just-completed');
         setTimeout(() => updatedItem.classList.remove('just-completed'), 650);
@@ -2054,67 +2146,55 @@
     }
   }
 
-  function deleteGoal(id, listItem) {
+  function deleteGoal(dateKey, id, listItem) {
     if (listItem) {
       listItem.style.opacity = '0';
       listItem.style.transform = 'translateX(-8px)';
-      setTimeout(() => finishDeleteGoal(id), 180);
+      setTimeout(() => finishDeleteGoal(dateKey, id), 180);
     } else {
-      finishDeleteGoal(id);
+      finishDeleteGoal(dateKey, id);
     }
   }
 
-  function finishDeleteGoal(id) {
-    goals = goals.filter(goal => goal.id !== id);
-    saveGoals();
-    renderGoals();
+  function finishDeleteGoal(dateKey, id) {
+    const goals = loadGoalsForDate(dateKey).filter(goal => goal.id !== id);
+    saveGoalsForDate(dateKey, goals);
+    renderWeekGoals();
   }
 
-  function addGoal() {
-    const text = els.input.value.trim();
+  function addGoal(dateKey, inputEl) {
+    const text = inputEl.value.trim();
     if (!text) return;
 
+    const goals = loadGoalsForDate(dateKey);
     goals.push({
       id: createGoalId(),
       text,
       done: false
     });
 
-    els.input.value = '';
-    saveGoals();
-    renderGoals();
+    saveGoalsForDate(dateKey, goals);
+    inputEl.value = '';
+    renderWeekGoals();
   }
 
-  function refreshForToday() {
-    const today = getTodayKey();
-    if (today !== loadedDateKey) {
-      const previousDateKey = loadedDateKey;
-      saveGoals();
+  function refreshWeekPlanner() {
+    const todayKey = getTodayKey();
+    const weekStartKey = getWeekStartKey(new Date());
 
-      if (previousDateKey && window.studyTrackerArchivePastDay) {
-        window.studyTrackerArchivePastDay(previousDateKey, null);
+    if (todayKey !== trackedTodayKey) {
+      if (trackedTodayKey && window.studyTrackerArchivePastDay) {
+        window.studyTrackerArchivePastDay(trackedTodayKey, null);
       }
-
-      loadGoals();
-      renderGoals();
+      trackedTodayKey = todayKey;
     }
+
+    if (weekStartKey !== trackedWeekStartKey) {
+      trackedWeekStartKey = weekStartKey;
+    }
+
+    renderWeekGoals();
   }
-
-  els.addBtn.addEventListener('click', addGoal);
-  els.input.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      addGoal();
-    }
-  });
-
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
-      refreshForToday();
-    }
-  });
-
-  setInterval(refreshForToday, 60000);
 
   function purgeLegacyGoalsInStorage() {
     const keys = [];
@@ -2141,7 +2221,14 @@
     });
   }
 
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      refreshWeekPlanner();
+    }
+  });
+
+  setInterval(refreshWeekPlanner, 60000);
+
   purgeLegacyGoalsInStorage();
-  loadGoals();
-  renderGoals();
+  renderWeekGoals();
 })();
