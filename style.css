@@ -568,6 +568,15 @@ body::before {
   background: transparent;
   border: none;
   padding: 2rem 1rem;
+  position: relative;
+}
+
+.panel-center .timer-mode,
+.panel-center .countdown-setup,
+.panel-center .controls,
+.panel-center .break-controls {
+  position: relative;
+  z-index: 2;
 }
 
 .countdown-setup {
@@ -670,14 +679,17 @@ body::before {
 
 .timer-wrapper {
   position: relative;
+  z-index: 1;
+  isolation: isolate;
   margin-bottom: 2.5rem;
 }
 
 .timer-glow {
   position: absolute;
-  inset: -30px -60px;
+  inset: -20px -40px;
+  z-index: 0;
   background: radial-gradient(circle, var(--glow-cyan) 0%, transparent 70%);
-  opacity: 0.4;
+  opacity: 0.35;
   pointer-events: none;
   animation: pulse 4s ease-in-out infinite;
 }
@@ -689,6 +701,7 @@ body::before {
 
 .timer {
   position: relative;
+  z-index: 1;
   display: block;
   font-size: clamp(3rem, 8vw, 5.5rem);
   font-weight: 600;
