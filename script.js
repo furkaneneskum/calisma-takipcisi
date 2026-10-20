@@ -2054,11 +2054,6 @@
     return li;
   }
 
-  function ensureDefaultOpenDay() {
-    if (openDayKeys.size > 0) return;
-    openDayKeys.add(getTodayKey());
-  }
-
   function formatDayGoalMeta(goals) {
     if (!goals.length) return 'Hedef yok';
     const done = goals.filter(goal => goal.done).length;
@@ -2076,7 +2071,6 @@
   }
 
   function renderWeekGoals(preserveScroll = false) {
-    ensureDefaultOpenDay();
     const days = getWeekPlanDays();
     const scrollTop = scrollEl.scrollTop;
     scrollEl.innerHTML = '';
@@ -2293,5 +2287,6 @@
   purgeLegacyGoalsInStorage();
   trackedTodayKey = getTodayKey();
   trackedWeekStartKey = getWeekStartKey(new Date());
+  openDayKeys.add(trackedTodayKey);
   renderWeekGoals();
 })();
