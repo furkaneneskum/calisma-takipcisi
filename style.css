@@ -570,52 +570,63 @@ body::before {
   padding: 2rem 1rem;
 }
 
-.timer-meta {
+.countdown-setup {
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
-  gap: 0.75rem 1rem;
-  width: 100%;
-  max-width: 560px;
-  margin-bottom: 1.25rem;
+  gap: 0.65rem;
+  margin-bottom: 1rem;
 }
 
-.timer-field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  min-width: min(100%, 11rem);
-  flex: 1 1 9rem;
+.countdown-setup[hidden] {
+  display: none;
 }
 
-.timer-field-label {
+.countdown-label {
   font-size: 0.62rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--text-muted);
 }
 
-.subject-select {
+.countdown-duration-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.countdown-duration {
   font-family: var(--font-mono);
-  font-size: 0.82rem;
+  font-size: 1rem;
+  width: 3.75rem;
+  text-align: center;
   color: var(--text-primary);
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 0.65rem 0.75rem;
-  min-height: 44px;
-  width: 100%;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  padding: 0.35rem 0.15rem;
   outline: none;
-  transition: border-color var(--transition);
+  -moz-appearance: textfield;
 }
 
-.subject-select:focus {
-  border-color: var(--border-hover);
+.countdown-duration::-webkit-outer-spin-button,
+.countdown-duration::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
-.subject-select:disabled {
+.countdown-duration:focus {
+  border-bottom-color: var(--border-hover);
+}
+
+.countdown-duration:disabled {
   opacity: 0.55;
+}
+
+.countdown-unit {
+  font-size: 0.68rem;
+  color: var(--text-muted);
 }
 
 .timer-mode {
@@ -692,19 +703,6 @@ body::before {
 
 .timer.running {
   color: var(--neon-cyan);
-}
-
-.timer.pomodoro-display {
-  letter-spacing: 0.12em;
-}
-
-.timer.pomodoro-break.running,
-.timer.pomodoro-break {
-  color: #f59e0b;
-}
-
-.timer-wrapper.pomodoro-mode .timer-glow {
-  background: radial-gradient(circle, rgba(168, 85, 247, 0.18) 0%, transparent 70%);
 }
 
 .timer.break-mode {
@@ -835,9 +833,9 @@ body::before {
   max-width: 640px;
 }
 
-.panel-center .tag-input {
-  flex: 1 1 12rem;
-  min-width: min(100%, 12rem);
+.panel-center .controls .tag-input {
+  flex: 1 1 100%;
+  min-width: min(100%, 20rem);
   min-height: 44px;
   margin: 0;
 }

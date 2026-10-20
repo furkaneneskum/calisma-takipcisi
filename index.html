@@ -57,36 +57,31 @@
       </div>
 
       <section class="panel panel-center" aria-label="Çalışma motoru">
-        <div class="timer-meta">
-          <label class="timer-field">
-            <span class="timer-field-label">Ders</span>
-            <select class="subject-select" id="subjectSelect" aria-label="Ders seç">
-              <option value="Python">Python</option>
-              <option value="Matematik">Matematik</option>
-              <option value="Algoritma">Algoritma</option>
-              <option value="Genel Çalışma">Genel Çalışma</option>
-            </select>
-          </label>
-          <input
-            class="tag-input"
-            id="tagInput"
-            type="text"
-            placeholder="Konu"
-            maxlength="32"
-            autocomplete="off"
-            spellcheck="false"
-            aria-label="Konu"
-          >
-        </div>
-
         <div class="timer-mode" role="tablist" aria-label="Zamanlayıcı modu">
           <button class="timer-mode-btn is-active" id="modeChrono" type="button" role="tab" aria-selected="true">Kronometre</button>
-          <button class="timer-mode-btn" id="modePomodoro" type="button" role="tab" aria-selected="false">Pomodoro</button>
+          <button class="timer-mode-btn" id="modeCountdown" type="button" role="tab" aria-selected="false">Geri sayım</button>
+        </div>
+
+        <div class="countdown-setup" id="countdownSetup" hidden>
+          <span class="countdown-label">Süre</span>
+          <div class="countdown-duration-wrap">
+            <input
+              class="countdown-duration"
+              id="countdownDuration"
+              type="number"
+              min="1"
+              max="720"
+              value="25"
+              inputmode="numeric"
+              aria-label="Geri sayım süresi (dakika)"
+            >
+            <span class="countdown-unit">dk</span>
+          </div>
         </div>
 
         <div class="timer-wrapper">
           <div class="timer-glow" aria-hidden="true"></div>
-          <time class="timer" id="timer">00 : 00 : 00</time>
+          <time class="timer" id="timer">00:00:00</time>
         </div>
 
         <div class="controls">
@@ -96,6 +91,16 @@
             <button class="btn btn-reset" id="btnReset" type="button">Sıfırla</button>
             <button class="btn btn-save" id="btnSave" type="button" disabled>Çalışmayı Kaydet</button>
           </div>
+          <input
+            class="tag-input"
+            id="tagInput"
+            type="text"
+            placeholder="Ne çalışıyorsun?"
+            maxlength="32"
+            autocomplete="off"
+            spellcheck="false"
+            aria-label="Etiket"
+          >
         </div>
         <div class="break-controls">
           <span class="break-label">Mola</span>

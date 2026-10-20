@@ -3,8 +3,7 @@
 
   const STORAGE_KEY = 'studyTrackerData';
   const SETTINGS_KEY = 'calismaTakipcisi_settings';
-  const POMODORO_WORK_MS = 25 * 60 * 1000;
-  const POMODORO_BREAK_MS = 5 * 60 * 1000;
+  const MAX_COUNTDOWN_MINUTES = 720;
 
   const storage = {
     get(key) {
@@ -41,8 +40,9 @@
     btnReset: document.getElementById('btnReset'),
     btnSave: document.getElementById('btnSave'),
     modeChrono: document.getElementById('modeChrono'),
-    modePomodoro: document.getElementById('modePomodoro'),
-    subjectSelect: document.getElementById('subjectSelect'),
+    modeCountdown: document.getElementById('modeCountdown'),
+    countdownSetup: document.getElementById('countdownSetup'),
+    countdownDuration: document.getElementById('countdownDuration'),
     tagInput: document.getElementById('tagInput'),
     breakDuration: document.getElementById('breakDuration'),
     btnBreakStart: document.getElementById('btnBreakStart'),
@@ -73,18 +73,28 @@
     },
     breakActive: null,
     timerMode: 'chrono',
-    pomodoro: createFreshPomodoro()
+    countdown: createFreshCountdown()
   };
 
   let saveInProgress = false;
 
-  function createFreshPomodoro() {
+  function getCountdownDurationMinutes() {
+    const value = Number(els.countdownDuration.value);
+    if (!Number.isFinite(value)) return 25;
+    return Math.min(MAX_COUNTDOWN_MINUTES, Math.max(1, Math.round(value)));
+  }
+
+  function getCountdownTotalMs() {
+    return getCountdownDurationMinutes() * 60 * 1000;
+  }
+
+  function createFreshCountdown() {
+    const totalMs = getCountdownTotalMs();
     return {
-      phase: 'work',
-      remainingMs: POMODORO_WORK_MS,
+      totalMs,
+      remainingMs: totalMs,
       runningSince: null,
-      workStartTime: null,
-      pausedWorkMs: 0
+      startTime: null
     };
   }
 
@@ -137,43 +147,24 @@
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   }
 
-  function formatDurationSpaced(ms) {
-    const totalSeconds = Math.floor(Math.max(0, ms) / 1000);
-    const h = Math.floor(totalSeconds / 3600);
-    const m = Math.floor((totalSeconds % 3600) / 60);
-    const s = totalSeconds % 60;
-    return `${String(h).padStart(2, '0')} : ${String(m).padStart(2, '0')} : ${String(s).padStart(2, '0')}`;
-  }
-
-  function formatPomodoroSpaced(ms) {
-    const totalSeconds = Math.ceil(Math.max(0, ms) / 1000);
-    const m = Math.floor(totalSeconds / 60);
-    const s = totalSeconds % 60;
-    return `${String(m).padStart(2, '0')} : ${String(s).padStart(2, '0')}`;
-  }
-
-  function isPomodoroMode() {
-    return state.timerMode === 'pomodoro';
+  function isCountdownMode() {
+    return state.timerMode === 'countdown';
   }
 
   function isChronoMode() {
     return state.timerMode === 'chrono';
   }
 
-  function getPomodoroRemainingMs() {
-    let remaining = state.pomodoro.remainingMs;
-    if (state.pomodoro.runningSince) {
-      remaining -= Date.now() - state.pomodoro.runningSince;
+  function getCountdownRemainingMs() {
+    let remaining = state.countdown.remainingMs;
+    if (state.countdown.runningSince) {
+      remaining -= Date.now() - state.countdown.runningSince;
     }
     return Math.max(0, remaining);
   }
 
-  function getPomodoroWorkElapsedMs() {
-    let total = state.pomodoro.pausedWorkMs;
-    if (state.pomodoro.phase === 'work' && state.pomodoro.runningSince) {
-      total += Date.now() - state.pomodoro.runningSince;
-    }
-    return total;
+  function getCountdownElapsedMs() {
+    return Math.max(0, state.countdown.totalMs - getCountdownRemainingMs());
   }
 
   function loadSettings() {
@@ -181,12 +172,15 @@
       const raw = storage.get(SETTINGS_KEY);
       if (!raw) return;
       const parsed = JSON.parse(raw);
-      if (parsed.subject && els.subjectSelect) {
-        const option = Array.from(els.subjectSelect.options).some(opt => opt.value === parsed.subject);
-        if (option) els.subjectSelect.value = parsed.subject;
+      if (Number.isFinite(parsed.countdownMinutes)) {
+        els.countdownDuration.value = String(
+          Math.min(MAX_COUNTDOWN_MINUTES, Math.max(1, Math.round(parsed.countdownMinutes)))
+        );
       }
-      if (parsed.timerMode === 'pomodoro' || parsed.timerMode === 'chrono') {
-        state.timerMode = parsed.timerMode;
+      if (parsed.timerMode === 'countdown' || parsed.timerMode === 'pomodoro') {
+        state.timerMode = 'countdown';
+      } else if (parsed.timerMode === 'chrono') {
+        state.timerMode = 'chrono';
       }
     } catch {
       /* ignore */
@@ -196,20 +190,24 @@
   function saveSettings() {
     storage.set(SETTINGS_KEY, JSON.stringify({
       timerMode: state.timerMode,
-      subject: els.subjectSelect ? els.subjectSelect.value : 'Genel Çalışma'
+      countdownMinutes: getCountdownDurationMinutes()
     }));
   }
 
   function buildSessionLabel() {
-    const subject = els.subjectSelect ? els.subjectSelect.value.trim() : '';
-    const topic = els.tagInput.value.trim();
-    if (subject && topic) return `${subject} — ${topic}`;
-    if (topic) return topic;
-    if (subject) return subject;
-    return '';
+    return els.tagInput.value.trim();
   }
 
-  function playPomodoroDoneTone() {
+  function applyCountdownDurationInput() {
+    if (isCountdownMode() && !state.countdown.runningSince) {
+      state.countdown = createFreshCountdown();
+      renderTimer();
+      updateButtons();
+    }
+    saveSettings();
+  }
+
+  function playTimerDoneTone() {
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
       const osc = ctx.createOscillator();
@@ -227,32 +225,32 @@
     }
   }
 
-  function notifyPomodoroPhase(message) {
-    playPomodoroDoneTone();
+  function notifyTimerDone(message) {
+    playTimerDoneTone();
     showUndoToast(message);
     undoBuffer = null;
   }
 
   function syncTimerModeUi() {
-    const pomodoro = isPomodoroMode();
-    els.modeChrono.classList.toggle('is-active', !pomodoro);
-    els.modePomodoro.classList.toggle('is-active', pomodoro);
-    els.modeChrono.setAttribute('aria-selected', pomodoro ? 'false' : 'true');
-    els.modePomodoro.setAttribute('aria-selected', pomodoro ? 'true' : 'false');
-    els.timerWrapper.classList.toggle('pomodoro-mode', pomodoro);
-    els.timer.classList.toggle('pomodoro-display', pomodoro);
+    const countdown = isCountdownMode();
+    els.modeChrono.classList.toggle('is-active', !countdown);
+    els.modeCountdown.classList.toggle('is-active', countdown);
+    els.modeChrono.setAttribute('aria-selected', countdown ? 'false' : 'true');
+    els.modeCountdown.setAttribute('aria-selected', countdown ? 'true' : 'false');
+    els.countdownSetup.hidden = !countdown;
+    els.timerWrapper.classList.toggle('countdown-mode', countdown);
   }
 
   function setTimerMode(mode) {
-    if (mode !== 'chrono' && mode !== 'pomodoro') return;
+    if (mode !== 'chrono' && mode !== 'countdown') return;
     if (state.timerMode === mode) return;
 
     if (state.active.runningSince) handleStop();
-    if (state.pomodoro.runningSince) pausePomodoro();
+    if (state.countdown.runningSince) pauseCountdown();
 
     state.timerMode = mode;
-    if (mode === 'pomodoro') {
-      state.pomodoro = createFreshPomodoro();
+    if (mode === 'countdown') {
+      state.countdown = createFreshCountdown();
     } else {
       state.active = { startTime: null, elapsedMs: 0, runningSince: null };
     }
@@ -568,10 +566,10 @@
             sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
             active: parsed.active || createFreshState().active,
             breakActive: parsed.breakActive || null,
-            timerMode: parsed.timerMode === 'pomodoro'
-              ? 'pomodoro'
+            timerMode: parsed.timerMode === 'countdown' || parsed.timerMode === 'pomodoro'
+              ? 'countdown'
               : (parsed.timerMode === 'chrono' ? 'chrono' : state.timerMode),
-            pomodoro: normalizePomodoro(parsed.pomodoro)
+            countdown: normalizeCountdown(parsed.countdown, parsed.pomodoro)
           };
         } else {
           archiveDay(parsed.date, parsed.sessions);
@@ -589,10 +587,10 @@
             sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
             active: parsed.active || createFreshState().active,
             breakActive: parsed.breakActive || null,
-            timerMode: parsed.timerMode === 'pomodoro'
-              ? 'pomodoro'
+            timerMode: parsed.timerMode === 'countdown' || parsed.timerMode === 'pomodoro'
+              ? 'countdown'
               : (parsed.timerMode === 'chrono' ? 'chrono' : state.timerMode),
-            pomodoro: normalizePomodoro(parsed.pomodoro)
+            countdown: normalizeCountdown(parsed.countdown, parsed.pomodoro)
           };
         } else {
           state = createFreshState();
@@ -607,8 +605,8 @@
         state.active.runningSince = Date.now();
       }
 
-      if (state.pomodoro.runningSince) {
-        state.pomodoro.runningSince = Date.now();
+      if (state.countdown.runningSince) {
+        state.countdown.runningSince = Date.now();
       }
 
       if (state.breakActive && Date.now() >= state.breakActive.endsAt) {
@@ -624,17 +622,35 @@
     }
   }
 
-  function normalizePomodoro(raw) {
-    const base = createFreshPomodoro();
-    if (!raw || typeof raw !== 'object') return base;
+  function normalizeCountdown(raw, legacyPomodoro) {
+    const base = createFreshCountdown();
+    const source = raw && typeof raw === 'object' ? raw : null;
 
-    base.phase = raw.phase === 'break' ? 'break' : 'work';
-    base.remainingMs = Number.isFinite(raw.remainingMs)
-      ? Math.max(0, raw.remainingMs)
-      : (base.phase === 'break' ? POMODORO_BREAK_MS : POMODORO_WORK_MS);
-    base.runningSince = raw.runningSince || null;
-    base.workStartTime = raw.workStartTime || null;
-    base.pausedWorkMs = Number.isFinite(raw.pausedWorkMs) ? Math.max(0, raw.pausedWorkMs) : 0;
+    if (source) {
+      base.totalMs = Number.isFinite(source.totalMs)
+        ? Math.max(60000, source.totalMs)
+        : base.totalMs;
+      base.remainingMs = Number.isFinite(source.remainingMs)
+        ? Math.max(0, Math.min(source.remainingMs, base.totalMs))
+        : base.remainingMs;
+      base.runningSince = source.runningSince || null;
+      base.startTime = source.startTime || source.workStartTime || null;
+      if (base.totalMs >= 60000) {
+        els.countdownDuration.value = String(Math.round(base.totalMs / 60000));
+      }
+      return base;
+    }
+
+    if (legacyPomodoro && typeof legacyPomodoro === 'object' && legacyPomodoro.phase !== 'break') {
+      base.remainingMs = Number.isFinite(legacyPomodoro.remainingMs)
+        ? Math.max(0, legacyPomodoro.remainingMs)
+        : base.remainingMs;
+      base.totalMs = Math.max(base.totalMs, base.remainingMs);
+      base.runningSince = legacyPomodoro.runningSince || null;
+      base.startTime = legacyPomodoro.workStartTime || null;
+      els.countdownDuration.value = String(Math.max(1, Math.round(base.totalMs / 60000)));
+    }
+
     return base;
   }
 
@@ -649,7 +665,7 @@
       },
       breakActive: null,
       timerMode: state.timerMode || 'chrono',
-      pomodoro: createFreshPomodoro()
+      countdown: createFreshCountdown()
     };
   }
 
@@ -665,14 +681,11 @@
       active.runningSince = Date.now();
     }
 
-    const pomodoro = { ...state.pomodoro };
-    if (pomodoro.runningSince) {
-      const delta = Date.now() - pomodoro.runningSince;
-      pomodoro.remainingMs = Math.max(0, pomodoro.remainingMs - delta);
-      if (pomodoro.phase === 'work') {
-        pomodoro.pausedWorkMs += delta;
-      }
-      pomodoro.runningSince = Date.now();
+    const countdown = { ...state.countdown };
+    if (countdown.runningSince) {
+      const delta = Date.now() - countdown.runningSince;
+      countdown.remainingMs = Math.max(0, countdown.remainingMs - delta);
+      countdown.runningSince = Date.now();
     }
 
     storage.set(STORAGE_KEY, JSON.stringify({
@@ -682,11 +695,11 @@
       active,
       breakActive: state.breakActive,
       timerMode: state.timerMode,
-      pomodoro,
+      countdown,
       archive: historyArchive
     }));
 
-    state.pomodoro = pomodoro;
+    state.countdown = countdown;
 
     state.active.elapsedMs = active.elapsedMs;
     state.active.runningSince = active.runningSince;
@@ -770,7 +783,7 @@
     syncTimerModeUi();
 
     if (isBreakRunning()) {
-      els.timer.textContent = formatDurationSpaced(getBreakRemainingMs());
+      els.timer.textContent = formatDuration(getBreakRemainingMs());
       els.timer.classList.remove('running');
       els.timer.classList.add('break-mode');
       els.timerWrapper.classList.add('break-active');
@@ -780,17 +793,14 @@
     els.timerWrapper.classList.remove('break-active');
     els.timer.classList.remove('break-mode');
 
-    if (isPomodoroMode()) {
-      const remaining = getPomodoroRemainingMs();
-      els.timer.textContent = formatPomodoroSpaced(remaining);
-      els.timer.classList.toggle('running', !!state.pomodoro.runningSince);
-      els.timer.classList.toggle('pomodoro-break', state.pomodoro.phase === 'break');
+    if (isCountdownMode()) {
+      els.timer.textContent = formatDuration(getCountdownRemainingMs());
+      els.timer.classList.toggle('running', !!state.countdown.runningSince);
       return;
     }
 
-    els.timer.classList.remove('pomodoro-break');
     const ms = getCurrentElapsedMs();
-    els.timer.textContent = formatDurationSpaced(ms);
+    els.timer.textContent = formatDuration(ms);
     els.timer.classList.toggle('running', !!state.active.runningSince);
   }
 
@@ -1100,14 +1110,14 @@
   function updateButtons() {
     const breakRunning = isBreakRunning();
     const chronoRunning = isChronoMode() && !!state.active.runningSince;
-    const pomodoroRunning = isPomodoroMode() && !!state.pomodoro.runningSince;
-    const anyTimerRunning = chronoRunning || pomodoroRunning;
+    const countdownRunning = isCountdownMode() && !!state.countdown.runningSince;
+    const anyTimerRunning = chronoRunning || countdownRunning;
 
     let canSave = false;
     if (isChronoMode() && !breakRunning) {
       canSave = state.active.startTime !== null && getCurrentElapsedMs() >= 1000;
-    } else if (isPomodoroMode() && !breakRunning && state.pomodoro.phase === 'work') {
-      canSave = getPomodoroWorkElapsedMs() >= 1000;
+    } else if (isCountdownMode() && !breakRunning) {
+      canSave = getCountdownElapsedMs() >= 1000;
     }
 
     els.btnStart.disabled = anyTimerRunning || breakRunning;
@@ -1115,11 +1125,11 @@
     els.btnReset.disabled = breakRunning;
     els.btnSave.disabled = !canSave || breakRunning || saveInProgress;
     els.tagInput.disabled = breakRunning || anyTimerRunning;
-    els.subjectSelect.disabled = breakRunning || anyTimerRunning;
     els.modeChrono.disabled = breakRunning || anyTimerRunning;
-    els.modePomodoro.disabled = breakRunning || anyTimerRunning;
+    els.modeCountdown.disabled = breakRunning || anyTimerRunning;
+    els.countdownDuration.disabled = breakRunning || anyTimerRunning;
 
-    els.btnBreakStart.disabled = breakRunning || anyTimerRunning || chronoRunning;
+    els.btnBreakStart.disabled = breakRunning || anyTimerRunning;
     els.btnBreakCancel.disabled = !breakRunning;
     els.breakDuration.disabled = breakRunning;
   }
@@ -1136,9 +1146,9 @@
       return;
     }
 
-    if (isPomodoroMode() && state.pomodoro.runningSince) {
-      if (getPomodoroRemainingMs() <= 0) {
-        completePomodoroPhase();
+    if (isCountdownMode() && state.countdown.runningSince) {
+      if (getCountdownRemainingMs() <= 0) {
+        completeCountdown();
       }
     }
 
@@ -1146,56 +1156,38 @@
     updateButtons();
   }
 
-  function pausePomodoro() {
-    if (!state.pomodoro.runningSince) return;
+  function pauseCountdown() {
+    if (!state.countdown.runningSince) return;
 
-    const delta = Date.now() - state.pomodoro.runningSince;
-    state.pomodoro.remainingMs = Math.max(0, state.pomodoro.remainingMs - delta);
-    if (state.pomodoro.phase === 'work') {
-      state.pomodoro.pausedWorkMs += delta;
-    }
-    state.pomodoro.runningSince = null;
+    const delta = Date.now() - state.countdown.runningSince;
+    state.countdown.remainingMs = Math.max(0, state.countdown.remainingMs - delta);
+    state.countdown.runningSince = null;
   }
 
-  function completePomodoroPhase() {
-    pausePomodoro();
-    state.pomodoro.remainingMs = 0;
-
-    if (state.pomodoro.phase === 'work') {
-      notifyPomodoroPhase('Pomodoro tamamlandı');
-      state.pomodoro.phase = 'break';
-      state.pomodoro.remainingMs = POMODORO_BREAK_MS;
-      state.pomodoro.pausedWorkMs = 0;
-      state.pomodoro.workStartTime = null;
-    } else {
-      notifyPomodoroPhase('Mola bitti');
-      state.pomodoro.phase = 'work';
-      state.pomodoro.remainingMs = POMODORO_WORK_MS;
-      state.pomodoro.pausedWorkMs = 0;
-      state.pomodoro.workStartTime = null;
-    }
-
+  function completeCountdown() {
+    pauseCountdown();
+    state.countdown.remainingMs = 0;
+    notifyTimerDone('Süre doldu');
     saveState();
     renderTimer();
     updateButtons();
     stopTicking();
   }
 
-  function startPomodoro() {
-    if (state.pomodoro.runningSince || isBreakRunning()) return;
+  function startCountdown() {
+    if (state.countdown.runningSince || isBreakRunning()) return;
 
     const now = new Date();
-    if (state.pomodoro.phase === 'work' && !state.pomodoro.workStartTime) {
-      state.pomodoro.workStartTime = formatClock(now);
+    if (!state.countdown.startTime) {
+      state.countdown.startTime = formatClock(now);
     }
 
-    if (state.pomodoro.remainingMs <= 0) {
-      state.pomodoro.remainingMs = state.pomodoro.phase === 'break'
-        ? POMODORO_BREAK_MS
-        : POMODORO_WORK_MS;
+    if (state.countdown.remainingMs <= 0) {
+      state.countdown = createFreshCountdown();
+      state.countdown.startTime = formatClock(now);
     }
 
-    state.pomodoro.runningSince = Date.now();
+    state.countdown.runningSince = Date.now();
     saveState();
     renderTimer();
     updateButtons();
@@ -1217,8 +1209,8 @@
   function handleStart() {
     if (isBreakRunning()) return;
 
-    if (isPomodoroMode()) {
-      startPomodoro();
+    if (isCountdownMode()) {
+      startCountdown();
       return;
     }
 
@@ -1234,9 +1226,9 @@
   }
 
   function handleStop() {
-    if (isPomodoroMode()) {
-      if (!state.pomodoro.runningSince) return;
-      pausePomodoro();
+    if (isCountdownMode()) {
+      if (!state.countdown.runningSince) return;
+      pauseCountdown();
       saveState();
       renderTimer();
       updateButtons();
@@ -1257,12 +1249,12 @@
   function handleReset() {
     if (isBreakRunning()) return;
 
-    if (state.active.runningSince || state.pomodoro.runningSince) {
+    if (state.active.runningSince || state.countdown.runningSince) {
       handleStop();
     }
 
-    if (isPomodoroMode()) {
-      state.pomodoro = createFreshPomodoro();
+    if (isCountdownMode()) {
+      state.countdown = createFreshCountdown();
     } else {
       state.active = {
         startTime: null,
@@ -1284,20 +1276,18 @@
     updateButtons();
 
     try {
-      if (isPomodoroMode()) {
-        if (state.pomodoro.phase !== 'work') return;
-
-        if (state.pomodoro.runningSince) {
-          pausePomodoro();
+      if (isCountdownMode()) {
+        if (state.countdown.runningSince) {
+          pauseCountdown();
         }
 
-        const elapsedMs = getPomodoroWorkElapsedMs();
+        const elapsedMs = getCountdownElapsedMs();
         if (elapsedMs < 1000) return;
 
         const endDate = new Date();
         const durationMinutes = Math.max(1, Math.round(elapsedMs / 60000));
         const label = buildSessionLabel();
-        const startTime = state.pomodoro.workStartTime || formatClock(endDate);
+        const startTime = state.countdown.startTime || formatClock(endDate);
 
         const session = {
           id: createSessionId(),
@@ -1308,7 +1298,7 @@
 
         if (label) session.label = label;
         state.sessions.push(session);
-        state.pomodoro = createFreshPomodoro();
+        state.countdown = createFreshCountdown();
       } else {
         const elapsedMs = getCurrentElapsedMs();
         if (elapsedMs < 1000 || !state.active.startTime) return;
@@ -1395,7 +1385,7 @@
     const plannedMinutes = getBreakDurationMinutes();
     if (plannedMinutes < 1) return;
 
-    if (state.active.runningSince || state.pomodoro.runningSince) {
+    if (state.active.runningSince || state.countdown.runningSince) {
       handleStop();
     }
 
@@ -1455,8 +1445,9 @@
   els.btnReset.addEventListener('click', handleReset);
   els.btnSave.addEventListener('click', handleSave);
   els.modeChrono.addEventListener('click', () => setTimerMode('chrono'));
-  els.modePomodoro.addEventListener('click', () => setTimerMode('pomodoro'));
-  els.subjectSelect.addEventListener('change', saveSettings);
+  els.modeCountdown.addEventListener('click', () => setTimerMode('countdown'));
+  els.countdownDuration.addEventListener('change', applyCountdownDurationInput);
+  els.countdownDuration.addEventListener('input', applyCountdownDurationInput);
   els.btnBreakStart.addEventListener('click', handleBreakStart);
   els.btnBreakCancel.addEventListener('click', handleBreakCancel);
   els.toastUndo.addEventListener('click', undoDelete);
@@ -1480,7 +1471,9 @@
       }
 
       renderAll();
-      if (state.active.runningSince || isBreakRunning()) startTicking();
+      if (state.active.runningSince || state.countdown.runningSince || isBreakRunning()) {
+        startTicking();
+      }
     }
   });
 
@@ -1499,11 +1492,11 @@
   syncTimerModeUi();
   renderAll();
 
-  if (state.pomodoro.runningSince) {
-    state.pomodoro.runningSince = Date.now();
+  if (state.countdown.runningSince) {
+    state.countdown.runningSince = Date.now();
   }
 
-  if (state.active.runningSince || state.pomodoro.runningSince || isBreakRunning()) {
+  if (state.active.runningSince || state.countdown.runningSince || isBreakRunning()) {
     startTicking();
   }
 })();
